@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.108.2
+
+- Build: Neue Versionen werden jetzt automatisch gebaut und veröffentlicht, sobald sie auf main landen. Keine Änderung an der App.
+
 ## 0.108.1
 
 - Positions-Tracker: Nach einem erneuten Verbinden oder geänderten Kontakten schickt die App eine bereits gezeigte Position nicht mehr aus dem Verlauf neu. Bisher änderten sich dabei die Attribute, Home Assistant hielt die alte Position (z. B. von gestern) für neu, und eine Person sprang auf sie statt auf die aktuelle Handy-Position.
