@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.108.0
+
+- LiveTrack: Der Tracker einer Person folgt einer laufenden Sitzung jetzt Punkt für Punkt (höchstens einer alle 5 s), jeder Punkt mit `heart_rate`, `cadence`, `power`, `speed_kmh`, `altitude_m`, `distance_m`, `duration_s` und `activity_type`, soweit Garmin sie schickt – der Recorder speichert so die ganze Strecke mit Puls. Nach dem Ende bleibt nur die Position.
+
 ## 0.107.5
 
 - Garmin-Protokoll: Einträge älterer Versionen mit konkreter Chat-ID (z. B. `GET /Conversation/Members/<id>`) werden beim Start entfernt und erscheinen nicht mehr als „Garmin hat etwas geändert“.
