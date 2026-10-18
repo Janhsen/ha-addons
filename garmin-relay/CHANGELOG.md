@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.108.1
+
+- Positions-Tracker: Nach einem erneuten Verbinden oder geänderten Kontakten schickt die App eine bereits gezeigte Position nicht mehr aus dem Verlauf neu. Bisher änderten sich dabei die Attribute, Home Assistant hielt die alte Position (z. B. von gestern) für neu, und eine Person sprang auf sie statt auf die aktuelle Handy-Position.
+
 ## 0.108.0
 
 - LiveTrack: Der Tracker einer Person folgt einer laufenden Sitzung jetzt Punkt für Punkt (höchstens einer alle 5 s), jeder Punkt mit `heart_rate`, `cadence`, `power`, `speed_kmh`, `altitude_m`, `distance_m`, `duration_s` und `activity_type`, soweit Garmin sie schickt – der Recorder speichert so die ganze Strecke mit Puls. Nach dem Ende bleibt nur die Position.
