@@ -1,0 +1,18 @@
+configuration:
+  phone:
+    name: Garmin-Telefonnummer
+    description: >-
+      Die bei Garmin Messenger registrierte Nummer im internationalen Format, zum
+      Beispiel +491701234567. Der SMS-Login-Code geht an diese Nummer.
+  api_token:
+    name: API-Token
+    description: >-
+      Geheimnis für die optionale HTTP-Sende-API (POST /send). Leer lassen, wenn
+      du nur die Web-Oberfläche oder die MQTT-Entitäten nutzt.
+  log_level:
+    name: Log-Level
+    description: >-
+      Bei der Fehlersuche debug verwenden. Unter Einstellungen → Health and logs der Web-Oberfläche kannst
+      du außerdem 30 Minuten lang ausführliches Logging einschalten.
+network:
+  8765/tcp: HTTP-Sende-API und Health-Check (für Web-Oberfläche und MQTT nicht nötig)

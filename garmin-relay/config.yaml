@@ -1,0 +1,42 @@
+name: Garmin inReach Relay
+version: "0.107.5"
+slug: garmin-relay
+description: Receive and send Garmin inReach messages in Home Assistant
+url: https://github.com/Janhsen/garmin-inreach-ha-addon
+# Prebuilt image from .github/workflows/image.yml (decision E7, revised
+# 18.10.2026): Home Assistant downloads it instead of building on the device.
+# Only amd64 is built; add an architecture here only together with image.yml.
+image: ghcr.io/janhsen/{arch}-addon-garmin-relay
+arch:
+  - amd64
+init: false
+startup: services
+boot: auto
+homeassistant_api: true
+services:
+  - mqtt:want
+watchdog: http://[HOST]:[PORT:8765]/health
+# Not part of Home Assistant backups (patterns relative to /data, matched
+# against the end of the path): received media, the protocol recording,
+# damaged files set aside and leftover temporary files (gutachten T10).
+backup_exclude:
+  - "media/*"
+  - "protocol.jsonl*"
+  - "*.corrupt-*"
+  - "*.tmp"
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:satellite-variant
+panel_title: Garmin inReach
+ports:
+  8765/tcp: null
+ports_description:
+  8765/tcp: HTTP send API (bearer token), optional if you use MQTT
+options:
+  phone: ""
+  api_token: ""
+  log_level: info
+schema:
+  phone: str
+  api_token: password?
+  log_level: list(trace|debug|info|warn|error)

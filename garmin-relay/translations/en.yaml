@@ -1,0 +1,18 @@
+configuration:
+  phone:
+    name: Garmin phone number
+    description: >-
+      The number registered with Garmin Messenger, in international format, for
+      example +491701234567. The SMS login code is sent here.
+  api_token:
+    name: API token
+    description: >-
+      Secret for the optional HTTP send API (POST /send). Leave empty if you only
+      use the web UI or the MQTT entities.
+  log_level:
+    name: Log level
+    description: >-
+      Use debug when troubleshooting. You can also switch on verbose logging for
+      30 minutes under Settings → Health and logs of the web UI.
+network:
+  8765/tcp: HTTP send API and health check (not needed for the web UI or MQTT)
