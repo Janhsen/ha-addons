@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.108.3
+
+- Positions-Tracker: Sie werden bei einem Neustart der App nicht mehr kurz „nicht verfügbar“. Bisher bekam danach auch eine alte Position einen neuen Zeitstempel, und eine Person sprang auf sie statt auf die aktuelle Handy-Position.
+
 ## 0.108.2
 
 - Build: Neue Versionen werden jetzt automatisch gebaut und veröffentlicht, sobald sie auf main landen. Keine Änderung an der App.
