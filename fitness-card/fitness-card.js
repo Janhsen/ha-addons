@@ -438,12 +438,18 @@ button:focus:not(:focus-visible){outline:none}
 .dock.nvbar button[aria-current="page"]{color:var(--text)}
 .wrap.nvnodock{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
 /* Personenwahl: beide Personen einzeln an/aus, Kopf oben fixiert */
-.top{position:sticky;top:0;z-index:12;margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:8px max(16px,env(safe-area-inset-left,0px));background:color-mix(in srgb,var(--bg) 96%,transparent);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4)}
+.top{position:sticky;top:0;z-index:12;margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:8px max(16px,env(safe-area-inset-left,0px));background:color-mix(in srgb,var(--bg) 98%,transparent);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4)}
 .whot{gap:8px;flex-wrap:nowrap}
 .whot button{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--sep);background:var(--surface);font:inherit;font-size:15px;font-weight:600;color:var(--text2);cursor:pointer}
 .whot button .dot{width:10px;height:10px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--pc)}
 .whot button[aria-pressed="true"]{background:color-mix(in srgb,var(--pc) 16%,var(--surface));border-color:color-mix(in srgb,var(--pc) 45%,transparent);color:var(--text)}
 .whot button[aria-pressed="true"] .dot{background:var(--pc);box-shadow:none}
+/* Handy: Kopf mit Personenwahl fest oben, auch bei Touren */
+@media (max-width:640px){
+.top{position:fixed;left:0;right:0;top:0;margin:0;z-index:16;padding:calc(8px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
+.wrap{padding-top:var(--toph,132px)}
+.mapbox{height:calc(100dvh - var(--toph,132px))}
+}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -566,9 +572,11 @@ function navVariant(){const top=$('.top');if(!top)return;let sw=$('#nvsw'),t2=$(
  t2.className=NV==='top'?'seg nvtop':NV==='title'?'nvtitle':'';t2.hidden=!(NV==='top'||NV==='title');
  t2.innerHTML=NV==='top'?TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" aria-pressed="${S.tab===k}">${ic(i,18)}<span>${n}</span></button>`).join(''):NV==='title'?TABS.map(([k,n])=>`<button data-k="${k}" ${S.tab===k?'aria-current="page"':''}>${n}</button>`).join(''):'';
  const w=$('.wrap');if(w)w.classList.toggle('nvnodock',NV!=='dock')}
+let topRO=null;
+function topH(){const t=$('.top'),w=$('.wrap');if(!t||!w)return;const set=()=>w.style.setProperty('--toph',t.offsetHeight+'px');set();if(!topRO&&window.ResizeObserver){topRO=new ResizeObserver(set);topRO.observe(t)}}
 function mountHeader(){
  $('#tabs').innerHTML=TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" ${S.tab===k?'aria-current="page"':''}>${ic(i,24)}<span>${n}</span></button>`).join('');
- navVariant();$('#who').className='chips2 whot';$('#who').innerHTML=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')}
+ topH();navVariant();$('#who').className='chips2 whot';$('#who').innerHTML=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')}
 $('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;setTab(b.dataset.k)};
 $('#who').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k,o=k==='p1'?'p2':'p1',canBoth=WHO.some(x=>x[0]==='both');let nw=S.who;
  if(S.who==='both')nw=o;else if(S.who===k)return;else nw=canBoth?'both':k;if(nw===S.who)return;S.who=nw;S.sel=null;S.card=null;S.kpi=null;S.pwin=null;render()};
