@@ -427,6 +427,23 @@ button:focus:not(:focus-visible){outline:none}
 .hC{display:flex;flex-direction:column;gap:6px}.hct{display:flex;align-items:center;gap:8px;font-size:28px;font-weight:700}.hcr{display:flex;gap:6px;justify-content:space-between;margin-top:8px}.hcr button{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;font:inherit;color:inherit;padding:4px;flex:1;min-width:0;cursor:pointer}
 .hcr button.dcard{background:none!important;box-shadow:none;border:0;padding:4px;display:flex;flex-direction:column;min-height:0}
 .hcr{max-width:460px}
+/* Navigation ohne schwebende Leiste: Entwürfe */
+#tabs.nvhide{display:none!important}
+#tabs2[hidden]{display:none}
+.nvtop{display:flex;width:100%;margin:2px 0 4px}.nvtop button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px}.nvtop button[aria-pressed="true"] svg{color:var(--tc)}
+.nvtitle{display:flex;gap:18px;overflow-x:auto;margin:-2px 0 2px;scrollbar-width:none}.nvtitle::-webkit-scrollbar{display:none}.nvtitle button{border:0;background:none;padding:0;min-height:44px;font:inherit;font-size:28px;font-weight:700;color:var(--text2);opacity:.55;cursor:pointer;white-space:nowrap}.nvtitle button[aria-current="page"]{color:var(--text);opacity:1}
+.dock.nvbar{left:0!important;right:0!important;transform:none!important;width:auto!important;max-width:none!important;margin:0!important;bottom:0!important;border-radius:0!important;border-width:1px 0 0!important;justify-content:space-around;padding:4px 8px calc(4px + env(safe-area-inset-bottom,0px))!important;background:color-mix(in srgb,var(--surface) 96%,transparent)!important;box-shadow:none!important}
+.dock.nvbar button{flex:1;min-width:0!important;background:none!important;gap:2px!important}
+.dock.nvbar button span{position:static!important;width:auto!important;height:auto!important;clip:auto!important}
+.dock.nvbar button[aria-current="page"]{color:var(--text)}
+.wrap.nvnodock{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+/* Personenwahl: beide Personen einzeln an/aus, Kopf oben fixiert */
+.top{position:sticky;top:0;z-index:12;margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:8px max(16px,env(safe-area-inset-left,0px));background:color-mix(in srgb,var(--bg) 96%,transparent);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4)}
+.whot{gap:8px;flex-wrap:nowrap}
+.whot button{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--sep);background:var(--surface);font:inherit;font-size:15px;font-weight:600;color:var(--text2);cursor:pointer}
+.whot button .dot{width:10px;height:10px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--pc)}
+.whot button[aria-pressed="true"]{background:color-mix(in srgb,var(--pc) 16%,var(--surface));border-color:color-mix(in srgb,var(--pc) 45%,transparent);color:var(--text)}
+.whot button[aria-pressed="true"] .dot{background:var(--pc);box-shadow:none}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -541,11 +558,20 @@ function initState(){S={tab:'heute',who:'p1',sel:null,sports:new Set(),range:nul
 const TABS=[['heute','Heute','sun','var(--tc-h)'],['tour','Touren','map','var(--tc-t)'],['trend','Trends','chart','var(--tc-s)']];
 let WHO=[['p1',PERS.p1.n],['p2',PERS.p2.n],['both','Beide (Test)']];
 function persons(){return S.who==='both'?['p1','p2']:[S.who]}
+let NV='dock';const NVSW=false;
+function navVariant(){const top=$('.top');if(!top)return;let sw=$('#nvsw'),t2=$('#tabs2');
+ if(NVSW){if(!sw){sw=document.createElement('div');sw.id='nvsw';sw.className='hvsw';top.parentNode.insertBefore(sw,top);sw.onclick=e=>{const b=e.target.closest('[data-nv]');if(b){NV=b.dataset.nv;render()}}}sw.innerHTML=[['dock','Jetzt'],['top','A Segment oben'],['bar','B Leiste unten'],['title','C Überschrift']].map(([k,n])=>`<button data-nv="${k}" aria-pressed="${NV===k}">${n}</button>`).join('')}
+ if(!t2){t2=document.createElement('nav');t2.id='tabs2';t2.setAttribute('aria-label','Bereich');top.parentNode.insertBefore(t2,top.nextSibling);t2.onclick=e=>{const b=e.target.closest('[data-k]');if(b)setTab(b.dataset.k)}}
+ const d=$('#tabs');d.classList.toggle('nvhide',NV==='top'||NV==='title');d.classList.toggle('nvbar',NV==='bar');
+ t2.className=NV==='top'?'seg nvtop':NV==='title'?'nvtitle':'';t2.hidden=!(NV==='top'||NV==='title');
+ t2.innerHTML=NV==='top'?TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" aria-pressed="${S.tab===k}">${ic(i,18)}<span>${n}</span></button>`).join(''):NV==='title'?TABS.map(([k,n])=>`<button data-k="${k}" ${S.tab===k?'aria-current="page"':''}>${n}</button>`).join(''):'';
+ const w=$('.wrap');if(w)w.classList.toggle('nvnodock',NV!=='dock')}
 function mountHeader(){
  $('#tabs').innerHTML=TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" ${S.tab===k?'aria-current="page"':''}>${ic(i,24)}<span>${n}</span></button>`).join('');
- $('#who').className='seg';$('#who').innerHTML=WHO.map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.who===k}">${k==='both'?'':`<span class="dot" style="background:var(${PERS[k].c})"></span>`}${n}</button>`).join('')}
+ navVariant();$('#who').className='chips2 whot';$('#who').innerHTML=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')}
 $('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;setTab(b.dataset.k)};
-$('#who').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.who=b.dataset.k;S.sel=null;S.card=null;S.kpi=null;S.pwin=null;render()};
+$('#who').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k,o=k==='p1'?'p2':'p1',canBoth=WHO.some(x=>x[0]==='both');let nw=S.who;
+ if(S.who==='both')nw=o;else if(S.who===k)return;else nw=canBoth?'both':k;if(nw===S.who)return;S.who=nw;S.sel=null;S.card=null;S.kpi=null;S.pwin=null;render()};
 function setTab(k){S.tab=k;S.play=false;clearInterval(playT);render()}
 let playT=0;
 function render(){closeSheet(true);if(S.tab!=='heute')S.card=null;if(S.tab!=='trend'){S.kpi=null;S.rsp=null;S.cspo=null;S.more=false}mountHeader();({heute:vHeute,tour:vTour,trend:vTrend})[S.tab]()}
