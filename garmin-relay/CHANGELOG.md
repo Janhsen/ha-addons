@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.110.1
+
+- Einstellungen: Das Höchstalter der Positions-Tracker lässt sich jetzt unter Einstellungen → Darstellung und Daten → Standorte → Höchstalter ändern (Minuten, 0 = aus, Standard 60).
+
 ## 0.110.0
 
 - Positions-Tracker: Eine Position, die älter als 60 Minuten ist, wird vom Tracker genommen (Zustand „unbekannt“, bis die nächste Position kommt). So springt eine Person nach einem Neustart von Home Assistant oder der App nicht mehr auf einen alten Ort, etwa von gestern. Eine schon zu alte Position wird gar nicht erst mit Koordinaten gesendet. Einstellbar mit der Option `tracker_max_age_min` (Minuten, 0 = aus); die Karte in der App zeigt weiter den letzten Ort.

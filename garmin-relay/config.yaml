@@ -1,5 +1,5 @@
 name: Garmin inReach Relay
-version: "0.110.0"
+version: "0.110.1"
 slug: garmin-relay
 description: Receive and send Garmin inReach messages in Home Assistant
 url: https://github.com/Janhsen/garmin-inreach-ha-addon
