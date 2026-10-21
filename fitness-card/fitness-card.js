@@ -407,6 +407,13 @@ button:focus:not(:focus-visible){outline:none}
 .tsheet[data-sel="0"] .det{display:none}.tsheet[data-sel="1"] .list{display:none}
 .tsheet .tclose{display:none;position:absolute;top:2px;right:8px;z-index:3}.tsheet[data-sel="1"] .det{margin-top:34px}.tsheet[data-sel="1"] .tclose{display:inline-flex}
 }
+/* Menü mobil: klein, nur Symbole, rechts unten */
+@media (max-width:640px){
+.dock{left:auto;right:max(12px,env(safe-area-inset-right,0px));transform:none;margin:12px 12px 0 auto;padding:4px;gap:2px}
+.dock button{min-width:48px;min-height:48px;gap:0}
+.dock button span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.wrap{padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
