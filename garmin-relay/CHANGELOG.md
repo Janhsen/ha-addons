@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.110.0
+
+- x
+
 ## 0.109.0
 
 - LiveTrack: Eigene Sitzungen (zum Beispiel von deiner Uhr) bekommen jetzt auch den Sensor „LiveTrack <Name>“ mit deinem Namen. Er ist an, sobald die Sitzung gefunden wird, auch bevor der erste Trackpunkt da ist.
