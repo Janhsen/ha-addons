@@ -379,6 +379,19 @@ button:focus:not(:focus-visible){outline:none}
 .aibox .ainow{margin-top:12px!important;padding-top:0;border-top:0}
 .aibox>p:first-child.ainow{margin-top:0!important}
 .aibox.zr{margin:4px 0 12px}.aibox.zr p{margin-top:6px}
+/* Zeitleiste der Touren entfernt */
+.scrubwrap{display:none!important}
+/* Einordnung als freier Text, ohne Kasten */
+.aibox,.aibox.zr{background:none;border:0;border-radius:0;padding:0}
+.aibox .ailab{display:none}
+.aibox.zr{margin:2px 0 12px}
+.aibox .aisrc{margin-top:2px}
+/* Desktop: Karten der Trends nebeneinander */
+@media (min-width:1100px){
+.stack{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));grid-auto-flow:dense;gap:14px;align-items:stretch}
+.stack>#rcard,.stack>#acard,.stack>:nth-last-child(-n+3){grid-column:1/-1}
+.stack>.cols{grid-template-columns:minmax(0,1fr)}
+}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
