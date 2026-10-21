@@ -393,6 +393,20 @@ button:focus:not(:focus-visible){outline:none}
 .stack>.cols{grid-template-columns:minmax(0,1fr)}
 }
 .dday:first-child{border-top:0;margin-top:0;padding-top:0;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--sep)}
+/* Touren mobil: Karte zuerst, Filter als Pillen auf der Karte, Tour als Kachel */
+.fb,.fpop,.tsum,.tclose{display:none}
+@media (max-width:640px){
+.ov.fb{display:flex;left:10px;top:10px;right:10px;gap:8px;flex-wrap:nowrap}
+.fpill{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--sep);background:color-mix(in srgb,var(--surface) 90%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.4);backdrop-filter:blur(14px) saturate(1.4);font:inherit;font-size:15px;font-weight:600;color:var(--text);box-shadow:var(--shadow);cursor:pointer}
+.fpill svg:last-child{transform:rotate(90deg);color:var(--text2)}.fpill[aria-expanded="true"] svg:last-child{transform:rotate(-90deg)}
+.fpop{display:block;position:absolute;left:10px;right:10px;top:62px;z-index:6;max-height:min(60%,420px);overflow-y:auto;background:color-mix(in srgb,var(--surface) 96%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--sep)}
+.fpop[hidden]{display:none}
+.fpop .lhead{border:0;padding:12px}.fpop[data-sec="sport"] #rangebar{display:none}.fpop[data-sec="date"] #sports{display:none}.fpop .sumkv{display:none}
+.ov.tl{display:none}
+.tsheet .tsum{display:block;padding:6px 4px 2px;font-size:17px}.tsheet[data-sel="1"] .tsum{display:none}
+.tsheet[data-sel="0"] .det{display:none}.tsheet[data-sel="1"] .list{display:none}
+.tsheet .tclose{display:none;position:absolute;top:2px;right:8px;z-index:3}.tsheet[data-sel="1"] .det{margin-top:34px}.tsheet[data-sel="1"] .tclose{display:inline-flex}
+}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -799,7 +813,17 @@ let MV={x:0,y:0,z:5},mapCv,mctx,mW=0,mH=0,tween=null,raf=0;
 /* Touren-Fenster (Bottom-Sheet, Handy) */
 const MQ_M='(max-width:640px)',DET_PX={s:200,m:.46,l:.88};
 function insetPx(){const t=$('#tsheet'),mb=$('#mapbox');if(!t||!mb||!matchMedia(MQ_M).matches)return 0;const d=t.dataset.d,tgt=d==='s'?DET_PX.s:DET_PX[d]*innerHeight;return Math.max(0,Math.round(tgt-(innerHeight-mb.getBoundingClientRect().bottom)))}
-function layoutTour(){const m=matchMedia(MQ_M).matches,sw=$('.scrubwrap'),tsb=$('#tsb'),mc=$('.mapcol');if(!sw||!tsb||!mc)return;if(m&&sw.parentNode!==tsb)tsb.insertBefore(sw,tsb.firstChild);else if(!m&&sw.parentNode!==mc)mc.appendChild(sw)}
+const isM=()=>matchMedia(MQ_M).matches;
+function fpills(){const a=$('#fps'),b=$('#fpd');if(!a||!b)return;const n=S.sports.size,pn={today:'Heute',yest:'Gestern',7:'7 Tage',30:'30 Tage',90:'90 Tage',all:'Alles'};
+ a.innerHTML=(n===1?ic([...S.sports][0],16):'')+'<span>'+(n===0?'Alle Sportarten':n===1?SP[[...S.sports][0]].n:n+' Sportarten')+'</span>'+ic('next',14);
+ b.innerHTML='<span>'+(S.range?dfmt(S.range[0],{day:'numeric',month:'numeric'})+(S.range[1]-S.range[0]>D?' bis '+dfmt(new Date(S.range[1]-D),{day:'numeric',month:'numeric'}):''):pn[S.preset]||'30 Tage')+'</span>'+ic('next',14)}
+function fpopClose(){const p=$('#fpop');if(p)p.hidden=true;$$('.fpill').forEach(x=>x.setAttribute('aria-expanded','false'))}
+function wireFilterBar(){fpills();const p=$('#fpop');if(!p)return;
+ $$('.fpill').forEach(b=>b.onclick=()=>{const open=!p.hidden&&p.dataset.sec===b.dataset.sec;fpopClose();if(open)return;p.dataset.sec=b.dataset.sec;p.hidden=false;b.setAttribute('aria-expanded','true')});
+ $('#mapbox').addEventListener('pointerdown',e=>{if(!e.target.closest('.fpill,.fpop'))fpopClose()});
+ $('#tclose').onclick=deselect}
+function deselect(){S.sel=null;S.cursor=null;if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}$$('.row').forEach(r=>r.setAttribute('aria-current','false'));detail();drawMap();drawScrub();curlab();setDetent('s');fitList(filtered().filter(a=>a.gps),50)}
+function layoutTour(){const m=matchMedia(MQ_M).matches,sw=$('.scrubwrap'),tsb=$('#tsb'),mc=$('.mapcol'),lh=$('.lhead'),fp=$('#fpop'),ls=$('.list');if(lh&&fp&&ls){if(m&&lh.parentNode!==fp)fp.appendChild(lh);else if(!m&&lh.parentNode!==ls)ls.insertBefore(lh,ls.firstChild)}if(!sw||!tsb||!mc)return;if(m&&sw.parentNode!==tsb)tsb.insertBefore(sw,tsb.firstChild);else if(!m&&sw.parentNode!==mc)mc.appendChild(sw)}
 let sheetMQ=false;
 function setDetent(d,refit){const t=$('#tsheet');if(!t)return;setTimeout(placePick,120);setTimeout(placePick,380);t.dataset.d=d;$('#grab').setAttribute('aria-expanded',String(d!=='s'));const mb=$('#mapbox');if(mb)mb.style.setProperty('--ins',insetPx()+'px');if(d!=='l'){const b=$('#tsb');if(b)b.scrollTop=0}if(refit&&S.sel){const a=byId[S.sel];if(a&&a.gps)fitList([a],60)}}
 function wireSheet(){const t=$('#tsheet'),g=$('#grab');if(!t||!g)return;
@@ -815,11 +839,12 @@ function wireSheet(){const t=$('#tsheet'),g=$('#grab');if(!t||!g)return;
 function vTour(){
  const v=$('#view');
  v.innerHTML=`<div class="tour"><div class="mapcol"><div class="mapbox" id="mapbox"><div id="mlmap"></div><canvas id="map" aria-label="Karte mit Aktivitäten"></canvas>
+ <div class="ov fb" id="fbar"><button class="fpill" id="fps" data-sec="sport" aria-expanded="false"></button><button class="fpill" id="fpd" data-sec="date" aria-expanded="false"></button></div><div class="fpop" id="fpop" hidden></div>
  <div class="ov tl" id="regions"></div><div class="ov tr"><button class="ib" id="zi" aria-label="Vergrößern">${ic('plus')}</button><button class="ib" id="zo" aria-label="Verkleinern">${ic('minus')}</button><button class="ib" id="zf" aria-label="Alles zeigen">${ic('fit')}</button></div>
  <div class="ov bl" id="legend"></div></div>
  <div class="scrubwrap"><div class="scrubrow"><button class="ib" id="pv" aria-label="Vorherige">${ic('prev')}</button><button class="ib" id="pp" aria-label="Abspielen">${ic('play')}</button><button class="ib" id="nx" aria-label="Nächste">${ic('next')}</button><div class="cur" id="curlab"></div></div><canvas id="scrub" aria-label="Zeitstrahl aller Aktivitäten"></canvas></div></div>
- <div class="tsheet" id="tsheet" data-d="m"><button class="grabber" id="grab" aria-label="Touren-Fenster: Höhe ändern" aria-expanded="true"><i></i></button><div class="tsb" id="tsb">
- <div class="det" id="det"></div>
+ <div class="tsheet" id="tsheet" data-d="m"><button class="grabber" id="grab" aria-label="Touren-Fenster: Höhe ändern" aria-expanded="true"><i></i></button><div class="tsb" id="tsb"><button class="ib tclose" id="tclose" aria-label="Tour abwählen">${ic('close')}</button>
+ <div class="tsum" id="tsum"></div><div class="det" id="det"></div>
  <div class="list"><div class="lhead"><div class="chips" id="sports"></div><div class="range" id="rangebar"></div></div><div class="rows" id="rows"></div></div></div></div></div>`;
  mapCv=$('#map');mctx=mapCv.getContext('2d');
  const ro=new ResizeObserver(()=>{sizeMap();drawMap();drawScrub();if(S.sel)detail()});ro.observe($('#mapbox'));ro.observe($('#scrub'));
@@ -828,14 +853,16 @@ function vTour(){
  $('#sports').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.sports.has(b.dataset.s)?S.sports.delete(b.dataset.s):S.sports.add(b.dataset.s);afterFilter()};
  $('#pv').onclick=()=>step(-1);$('#nx').onclick=()=>step(1);$('#pp').onclick=togglePlay;
  $('#zi').onclick=()=>zoomBy(1);$('#zo').onclick=()=>zoomBy(-1);$('#zf').onclick=()=>{fitList(filtered().filter(a=>a.gps),40)};
- const fl=filtered();if(!S.sel||!fl.find(a=>a.id===S.sel))S.sel=(fl.find(a=>a.gps)||fl[0]||{}).id||null;
- layoutTour();wireSheet();sizeMap();buildRows();rangebar();legend();regions();
+ const fl=filtered();if(!S.sel||!fl.find(a=>a.id===S.sel))S.sel=isM()?null:(fl.find(a=>a.gps)||fl[0]||{}).id||null;
+ $('#tsheet').dataset.d=isM()&&!S.sel?'s':'m';
+ layoutTour();wireSheet();wireFilterBar();sizeMap();buildRows();rangebar();legend();regions();
  if(S.sel){const a=byId[S.sel];if(a.gps)fitList([a],60,true);detail()}else fitList(fl.filter(a=>a.gps),40,true);
  drawMap();drawScrub();curlab()}
-function afterFilter(){const fl=filtered();if(!fl.find(a=>a.id===S.sel))S.sel=(fl.find(a=>a.gps)||fl[0]||{}).id||null;$$('#sports button').forEach(b=>b.setAttribute('aria-pressed',S.sports.has(b.dataset.s)));buildRows();rangebar();regions();detail();drawMap();drawScrub();curlab();const a=S.sel&&byId[S.sel];fitList(a&&a.gps?[a]:fl.filter(x=>x.gps),50)}
+function afterFilter(){const fl=filtered();if(!fl.find(a=>a.id===S.sel))S.sel=isM()?null:(fl.find(a=>a.gps)||fl[0]||{}).id||null;$$('#sports button').forEach(b=>b.setAttribute('aria-pressed',S.sports.has(b.dataset.s)));buildRows();rangebar();regions();detail();drawMap();drawScrub();curlab();const a=S.sel&&byId[S.sel];fitList(a&&a.gps?[a]:fl.filter(x=>x.gps),50)}
 const isoD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 function rangebar(){const b=$('#rangebar'),fl=filtered(),g=fl.filter(a=>a.gps),km=g.reduce((s,a)=>s+a.st.dist/1000,0),hh=fl.reduce((s,a)=>s+a.st.dur/3600,0),up=g.reduce((s,a)=>s+a.st.gain,0);
  b.innerHTML=`<div class="seg" id="presets">${[['today','Heute'],['yest','Gestern'],['7','7 Tage'],['30','30 Tage'],['90','90 Tage'],['all','Alles']].map(([k,n])=>`<button data-p="${k}" aria-pressed="${!S.range&&S.preset===k}">${n}</button>`).join('')}</div>`+`<label class="dl2">Von <input type="date" id="tf" min="${iso(0)}" max="${iso(ND)}" value="${isoD(new Date(axis()[0]))}"></label><label class="dl2">Bis <input type="date" id="tt" min="${iso(0)}" max="${iso(ND)}" value="${isoD(new Date(axis()[1]-D))}"></label>`+(S.range?`<button class="chip" id="clr">${dfmt(S.range[0],{day:'numeric',month:'numeric'})}${S.range[1]-S.range[0]>D?' bis '+dfmt(new Date(S.range[1]-D),{day:'numeric',month:'numeric'}):''} ${ic('x',14)}</button>`:'')+`<div class="kv sumkv"><div><b>${fl.length}</b><span>Aktivitäten</span></div><div><b>${f0(km)} km</b><span>Distanz</span></div><div><b>${f0(hh)} h</b><span>Zeit</span></div><div><b>${f0(up)} m</b><span>Aufstieg</span></div></div>`;
+ {const ts=$('#tsum');if(ts)ts.innerHTML=`<b>${fl.length} ${fl.length===1?'Tour':'Touren'}</b> <span class="muted">· ${f0(km)} km · ${f0(hh)} h</span>`}fpills();
  $('#presets').onclick=e=>{const x=e.target.closest('button');if(!x)return;S.preset=x.dataset.p;S.range=null;afterFilter()};const tf=$('#tf'),tt=$('#tt'),dch=()=>{if(!tf.value||!tt.value)return;const q=v=>{const [y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)};let a=q(tf.value),b=q(tt.value);if(b<a)[a,b]=[b,a];if(b>TODAY)b=new Date(TODAY);if(a>b)a=new Date(b);S.range=[a,new Date(b.getTime()+D)];S.preset='custom';afterFilter()};tf.onchange=dch;tt.onchange=dch;const c=$('#clr');if(c)c.onclick=()=>{S.range=null;S.preset='30';afterFilter()}}
 function legend(){$('#legend').innerHTML=persons().map(w=>`<span class="dot" style="background:var(${PERS[w].c});margin-right:4px"></span>${PERS[w].n}`).join(' &nbsp; ')+' &nbsp;·&nbsp; '+attrib()}
 function regions(){const fl=filtered().filter(a=>a.gps),ks=[...new Set(fl.map(a=>a.place))];$('#regions').innerHTML=ks.map(k=>`<button class="chip" data-p="${k}">${PL[k].n}</button>`).join('');$('#regions').onclick=e=>{const b=e.target.closest('button');if(!b)return;fitList(fl.filter(a=>a.place===b.dataset.p),50)}}
@@ -844,9 +871,9 @@ function buildRows(){const fl=filtered();let cur='',h='';
   h+=`<button class="row" data-id="${a.id}" aria-current="${a.id===S.sel}"><span class="av" style="background:var(${PERS[a.who].c})">${ic(a.sport,18)}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${a.date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}${S.who==='both'?' · '+PERS[a.who].n:''}${jointOf(a)?' · zu zweit':''}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<div class="muted sm" style="font-weight:400">${a.gps?hm(a.st.dur):''}</div></span></button>`}
  $('#rows').innerHTML=h||'<div class="card muted">Keine Aktivitäten im Filter.</div>';
  $('#rows').onclick=e=>{const b=e.target.closest('.row');if(b){select(b.dataset.id,{fly:true});if(innerWidth<641){const dt=$('#det');dt&&dt.scrollIntoView({behavior:'smooth',block:'start'})}}}}
-function select(id,o={}){if(matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d!=='m')setDetent('m');if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}S.sel=id;S.cursor=null;$$('.row').forEach(r=>r.setAttribute('aria-current',r.dataset.id===id));const r=$(`.row[data-id="${id}"]`);if(r&&!o.noScroll){const box=$('#rows'),t=r.offsetTop-box.offsetTop;if(t<box.scrollTop||t+r.offsetHeight>box.scrollTop+box.clientHeight)box.scrollTo({top:t-box.clientHeight/2,behavior:o.fast?'auto':'smooth'})}
+function select(id,o={}){fpopClose();if(matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d!=='m')setDetent('m');if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}S.sel=id;S.cursor=null;$$('.row').forEach(r=>r.setAttribute('aria-current',r.dataset.id===id));const r=$(`.row[data-id="${id}"]`);if(r&&!o.noScroll){const box=$('#rows'),t=r.offsetTop-box.offsetTop;if(t<box.scrollTop||t+r.offsetHeight>box.scrollTop+box.clientHeight)box.scrollTo({top:t-box.clientHeight/2,behavior:o.fast?'auto':'smooth'})}
  const a=byId[id];if(o.fly&&a.gps)fitList([a],60,o.fast);detail();drawMap();drawScrub();curlab()}
-function curlab(){const a=byId[S.sel];$('#curlab').innerHTML=a?`<span class="dot" style="background:var(${PERS[a.who].c})"></span> ${esc(ttl(a))} <span class="muted sm" style="font-weight:400">· ${dfmt(a.date,{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</span>`:'Keine Auswahl';$('#pp').innerHTML=ic(S.play?'pause':'play')}
+function curlab(){const a=byId[S.sel],ts=$('#tsheet');if(ts)ts.dataset.sel=a?'1':'0';$('#curlab').innerHTML=a?`<span class="dot" style="background:var(${PERS[a.who].c})"></span> ${esc(ttl(a))} <span class="muted sm" style="font-weight:400">· ${dfmt(a.date,{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</span>`:'Keine Auswahl';$('#pp').innerHTML=ic(S.play?'pause':'play')}
 function step(dir){const fl=filtered().slice().reverse(),i=fl.findIndex(a=>a.id===S.sel);if(!fl.length)return;const j=Math.max(0,Math.min(fl.length-1,i+dir));select(fl[j].id,{fly:true});return j!==i}
 function togglePlay(){S.play=!S.play;clearInterval(playT);if(S.play){const fl=filtered();if(fl[0]&&S.sel===fl[0].id)select(fl[fl.length-1].id,{fly:true});playT=setInterval(()=>{if(!step(1)){S.play=false;clearInterval(playT);curlab()}},1500)}curlab()}
 /* Karte */
