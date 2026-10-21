@@ -426,6 +426,7 @@ button:focus:not(:focus-visible){outline:none}
 .hB{display:flex;flex-direction:column;gap:6px}.hbt{display:flex;align-items:center;gap:8px;font-size:28px;font-weight:700}.hbs{font-size:15px}.mrow{display:grid;grid-template-columns:96px 1fr auto 16px;align-items:center;gap:10px;min-height:48px;border:0;border-top:1px solid var(--sep);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0}.mrow:first-of-type{margin-top:6px}.mrow b{min-width:44px;text-align:right}.mrow svg{color:var(--text2)}
 .hC{display:flex;flex-direction:column;gap:6px}.hct{display:flex;align-items:center;gap:8px;font-size:28px;font-weight:700}.hcr{display:flex;gap:6px;justify-content:space-between;margin-top:8px}.hcr button{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;font:inherit;color:inherit;padding:4px;flex:1;min-width:0;cursor:pointer}
 .hcr button.dcard{background:none!important;box-shadow:none;border:0;padding:4px;display:flex;flex-direction:column;min-height:0}
+.hcr{max-width:460px}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -436,7 +437,7 @@ const HTML=`<div class="wrap">
 </div>
 <nav class="dock" id="tabs" aria-label="Bereich"></nav>
 `;
-const liveSigOf=h=>Object.entries(h.states||{}).filter(([id,s])=>/^binary_sensor\.garmin_inreach_relay_livetrack_/.test(id)&&s&&s.state==='on').map(([id,s])=>id+'@'+((s.attributes||{}).last_update||'')).sort().join('|');
+const liveSigOf=h=>Object.entries(h.states||{}).filter(([id,s])=>s&&((/^binary_sensor\.garmin_inreach_relay_livetrack_/.test(id)&&s.state==='on')||/^sensor\.garmin_[a-z]+_(schritte|body_battery|trainingsbereitschaft|ruhepuls|durchschnittliches_stresslevel)$/.test(id)||/^input_text\.fitness_(analyse|zeitraum)_/.test(id))).map(([id,s])=>id+'@'+((s.attributes||{}).last_update||s.last_updated||'')).sort().join('|');
 function createApp(host,root,opts){
 
 const $=(s,e=root)=>e.querySelector(s),$$=(s,e=root)=>[...e.querySelectorAll(s)];
@@ -737,7 +738,7 @@ function heroHtml(w,di,d,T,AD,r){const bb=bbNow(w,di),bk=bb==null?'ok':lvl(bb),R
 function personHeute(w,di){const d=DAILY[w][di],T=TODAYV[w],AD=ampelData(w,di),r=AD.st,as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),
  ex=as.length?as:[ACTS.find(a=>a.who===w&&dayOf(a.date)<=di)].filter(Boolean),R=44,C=2*Math.PI*R;
  const open=CARDS.map(c=>c[0]).find(k=>S.card===w+k);
- return`<section class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">${di===ND?'Stand '+(LIVE?nowHM():'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}</span></div>
+ return`<section class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">${di===ND?'Stand '+(LIVE?standHM(w):'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}</span></div>
  ${hvSwitch()}${heroHtml(w,di,d,T,AD,r)}
  <div class="cg">${CARDS.map(c=>cardHtml(w,c[0],d)).join('')}</div>
  ${analyseHtml(w,di)}
@@ -1210,8 +1211,15 @@ async function loadLiveTracks(hass,who){
    gps:pts.length>1,place:'live',ll:pts,w:pts.length>1?pts.map(p=>W0(p[0],p[1])):null,tr:null,joint:null,zones:[0,0,0,0,0],
    st:{dist,dur,elapsed:dur,gain:0,loss:0,avgHR:at.heart_rate||0,maxHR:0,kcal:0,load:0,avgV:dur?dist/dur*3.6:0,maxV:0},liveAt:at.last_update||null,nopts:nopts,startAt:at.start||null};if(T)applyTr(o,T,true);out.push(o)}
  return out}
+/* Aktuelle Werte direkt aus den Sensoren (die Tageszeile aus dem Recorder hinkt hinterher) */
+const NOWK={steps:'schritte',bb:'body_battery',stress:'durchschnittliches_stresslevel',rhr:'ruhepuls',hrv:'hrv_letzte_nacht_durchschnitt',sleep:'schlafwert',ready:'trainingsbereitschaft',kcal:'kalorien',goal:'tagliches_schrittziel'};
+const NOWAT={};
+function applyNow(hass,who){const st=hass&&hass.states||{};for(const w of who){const T=TODAYV[w],d=DAILY[w]&&DAILY[w][ND];if(!T)continue;let lu=0;
+ for(const [k,n] of Object.entries(NOWK)){const e=st['sensor.garmin_'+UNAME[w]+'_'+n];if(!e)continue;const v=parseFloat(e.state);if(!isFinite(v))continue;T[k]=Math.round(v);if(d)d[k]=Math.round(v);const t=Date.parse(e.last_updated||e.last_changed||'');if(isFinite(t)&&t>lu)lu=t}
+ if(lu)NOWAT[w]=lu}}
+const standHM=w=>NOWAT[w]?new Date(NOWAT[w]).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):nowHM();
 async function refreshLive(hass,who){
- DAYSRC=dayReal;readAnalyse(hass,who);
+ applyNow(hass,who);DAYSRC=dayReal;readAnalyse(hass,who);
  const lv=await loadLiveTracks(hass,who);
  ACTS=ACTS.filter(a=>!a.live).concat(lv).sort((a,b)=>b.date-a.date);byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
  if(S&&S.sel&&!byId[S.sel])S.sel=null}
