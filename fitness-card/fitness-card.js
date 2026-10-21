@@ -450,6 +450,7 @@ button:focus:not(:focus-visible){outline:none}
 .wrap{padding-top:var(--toph,132px)}
 .mapbox{height:calc(100dvh - var(--toph,132px))}
 }
+.pstack{display:flex;flex-direction:column;gap:14px;min-width:0}.aitile .aibox{margin-top:8px}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -756,9 +757,9 @@ function nowLine(w){const T=TODAYV[w],d=DAILY[w][ND],h=new Date().getHours(),liv
   if(left>0)p.push('Bis zum Schrittziel fehlt noch '+walk+'.')}
  else{p.push(trained?'Das Training ist geschafft. Jetzt zählt die Erholung.':'Für heute ist Training eher zu spät, besser entspannt ausklingen lassen.');if(bb!=null&&bb<25)p.push('Deine Energie ist fast leer, geh früh ins Bett.');p.push('Dimme das Licht und halte das Schlafzimmer kühl.')}
  return p.filter(Boolean).join(' ')}
-function analyseHtml(w,di){if(di!==ND)return'';const a=AIT[w],t=a&&a.text?(a.text+(a.more||'')).trim():'',cl=t&&t!=='.'?t:'',nl=nowLine(w);if(!cl&&!nl)return'';
+function analyseHtml(w,di,stand){if(di!==ND)return'';const a=AIT[w],t=a&&a.text?(a.text+(a.more||'')).trim():'',cl=t&&t!=='.'?t:'',nl=nowLine(w);if(!cl&&!nl)return'';
  const hh=a&&typeof a.when==='string'?a.when:a&&a.when?a.when.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'',now=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
- return`<h2 class="h2" style="margin-top:18px;display:flex;align-items:center;gap:6px"><span style="color:var(--c-body);display:inline-flex">${ic('spark',18)}</span>Einordnung</h2><div class="aibox">${cl?`<p>${esc(cl)}</p><div class="muted sm aisrc">Claude, ${hh||'heute früh'}</div>`:''}${nl?`<p class="ainow"><b>Jetzt, ${now}:</b> ${esc(nl)}</p>`:''}</div>`}
+ return`<section class="card aitile"><h2 class="h2" style="margin:0;display:flex;align-items:center;gap:6px"><span style="color:var(--c-body);display:inline-flex">${ic('spark',18)}</span>Einordnung<span class="sm muted" style="margin-left:auto;font-weight:400">${stand||''}</span></h2><div class="aibox">${cl?`<p>${esc(cl)}</p><div class="muted sm aisrc">Claude, ${hh||'heute früh'}</div>`:''}${nl?`<p class="ainow"><b>Jetzt, ${now}:</b> ${esc(nl)}</p>`:''}</div></section>`}
 let HV='c';const HVSW=false;
 function hvSwitch(){if(!HVSW)return'';return`<div class="hvsw" role="group" aria-label="Kopf-Entwurf">${[['o','Jetzt'],['a','A'],['b','B'],['c','C']].map(([k,n])=>`<button data-hv="${k}" aria-pressed="${HV===k}">${n}</button>`).join('')}</div>`}
 const lvl=v=>v>=60?'ok':v>=30?'warn':'bad';
@@ -772,12 +773,11 @@ function heroHtml(w,di,d,T,AD,r){const bb=bbNow(w,di),bk=bb==null?'ok':lvl(bb),R
 function personHeute(w,di){const d=DAILY[w][di],T=TODAYV[w],AD=ampelData(w,di),r=AD.st,as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),
  ex=as.length?as:[ACTS.find(a=>a.who===w&&dayOf(a.date)<=di)].filter(Boolean),R=44,C=2*Math.PI*R;
  const open=CARDS.map(c=>c[0]).find(k=>S.card===w+k);
- return`<section class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">${di===ND?'Stand '+(LIVE?standHM(w):'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}</span></div>
+ return`<div class="pstack">${analyseHtml(w,di,`${di===ND?'Stand '+(LIVE?standHM(w):'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}`)}<section class="card">
  ${hvSwitch()}${heroHtml(w,di,d,T,AD,r)}
  <div class="cg">${CARDS.map(c=>cardHtml(w,c[0],d)).join('')}</div>
- ${analyseHtml(w,di)}
  <h2 class="h2" style="margin-top:18px">${as.length?'Aktivitäten dieses Tages':'Zuletzt'}</h2>
- ${ex.length?ex.map(a=>`<button class="arow" data-open="${a.id}"><span class="mr">${routeSvg(a)||`<span class="av" style="background:var(${PERS[w].c})">${ic(a.sport,20)}</span>`}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${SP[a.sport].n}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<span class="muted sm">${a.gps?f0(a.st.gain)+' m ↑ · ':''}${hm(a.st.dur)}</span></span>${ic('next',16)}</button>`).join(''):'<div class="muted">Noch keine Aktivität.</div>'}</section>`}
+ ${ex.length?ex.map(a=>`<button class="arow" data-open="${a.id}"><span class="mr">${routeSvg(a)||`<span class="av" style="background:var(${PERS[w].c})">${ic(a.sport,20)}</span>`}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${SP[a.sport].n}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<span class="muted sm">${a.gps?f0(a.st.gain)+' m ↑ · ':''}${hm(a.st.dur)}</span></span>${ic('next',16)}</button>`).join(''):'<div class="muted">Noch keine Aktivität.</div>'}</section></div>`}
 function weekSum(w,off){const d=DAILY[w],e=ND-off,s=d.slice(Math.max(0,e-6),e+1);return{dist:s.reduce((a,x)=>a+x.dist,0),asc:s.reduce((a,x)=>a+x.ascent,0),dur:s.reduce((a,x)=>a+x.dur,0),load:s.reduce((a,x)=>a+x.load,0),n:ACTS.filter(a=>a.who===w&&dayOf(a.date)>e-7&&dayOf(a.date)<=e).length}}
 function routeSvg(a){if(!a.w)return'';let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const[x,y]of a.w){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
  const s=Math.min(100/(x1-x0||1e-9),100/(y1-y0||1e-9)),ox=(120-(x1-x0)*s)/2,oy=(110-(y1-y0)*s)/2;
