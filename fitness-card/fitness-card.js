@@ -447,10 +447,13 @@ button:focus:not(:focus-visible){outline:none}
 /* Handy: Kopf mit Personenwahl fest oben, auch bei Touren */
 @media (max-width:640px){
 .top{position:fixed;left:0;right:0;top:0;margin:0;z-index:16;padding:calc(8px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
-.wrap{padding-top:var(--toph,132px)}
+.wrap{padding-top:calc(var(--toph,132px) - env(safe-area-inset-top,0px))}
 .mapbox{height:calc(100dvh - var(--toph,132px))}
 }
 .pstack{display:flex;flex-direction:column;gap:14px;min-width:0}.aitile .aibox{margin-top:8px}
+.pcmp{display:grid;grid-template-columns:minmax(84px,auto) 1fr 1fr;align-items:center;gap:6px 8px;margin:4px 0 12px;max-width:520px}
+.pc-h{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}.pc-h b{display:flex;align-items:center;gap:6px;font-size:17px}.pc-h .sm{display:flex;align-items:center;gap:4px;color:var(--text2)}
+.pc-l{font-size:15px;color:var(--text2)}.pc-r{display:flex;justify-content:center;border:0;background:none;padding:2px;min-height:44px;cursor:pointer;border-radius:var(--r)}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -808,7 +811,11 @@ function actRows(w,di){const as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),ex
  return`<h2 class="h2" style="margin-top:6px">${as.length?'Aktivitäten dieses Tages':'Zuletzt'}</h2>`+(ex.length?ex.map(a=>`<button class="arow" data-open="${a.id}"><span class="mr">${routeSvg(a)||`<span class="av" style="background:var(${PERS[w].c})">${ic(a.sport,20)}</span>`}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${SP[a.sport].n}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<span class="muted sm">${a.gps?f0(a.st.gain)+' m ↑ · ':''}${hm(a.st.dur)}</span></span>${ic('next',16)}</button>`).join(''):'<div class="muted">Noch keine Aktivität.</div>')}
 function pairHeute(di){const ws=['p1','p2'],A={p1:ampelData('p1',di),p2:ampelData('p2',di)},D2={p1:DAILY.p1[di],p2:DAILY.p2[di]};
  const head=`<div class="pair phead">${ws.map(w=>`<div class="who" style="margin:0"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>`).join('')}</div>`;
- const heroes=`<div class="pair">${ws.map(w=>{const d=D2[w],r=A[w].st,R=30,C=2*Math.PI*R;return`<div class="phero"><svg width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="Bereitschaft ${d.ready} von 100"><circle cx="36" cy="36" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="8"/><circle cx="36" cy="36" r="${R}" fill="none" stroke="var(--${r})" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(C*d.ready/100).toFixed(1)} ${C}" transform="rotate(-90 36 36)"/><text x="36" y="42" text-anchor="middle" font-size="19" font-weight="700" fill="var(--text)">${d.ready}</text></svg><div><div class="big" style="font-size:15px"><span class="dot" style="background:var(--${r})"></span>${ST[r]}</div><div class="muted sm">Bereitschaft</div></div>${trafficHtml(r)}</div>`}).join('')}</div>`;
+ const cmpRow=(lab,k,f)=>`<div class="pc-l">${lab}</div>${ws.map(w=>{const x=f(w);return x==null?'<div></div>':`<button class="pc-r" data-ins="${k}" data-w="${w}" aria-label="${lab} ${PERS[w].n} ${x.v}">${gauge(x.v,56,6,x.k,x.t,17)}</button>`}).join('')}`;
+ const heroes=`<div class="pcmp"><div></div>${ws.map(w=>{const r=A[w].st;return`<div class="pc-h"><b><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</b><span class="sm"><span class="dot" style="background:var(--${r})"></span>${ST[r]}</span></div>`}).join('')}
+  ${cmpRow('Bereitschaft','rdy',w=>({v:D2[w].ready,k:A[w].st,t:D2[w].ready}))}
+  ${cmpRow('Body Battery','bat',w=>{const b=bbNow(w,di);return b==null?null:{v:b,k:lvl(b),t:Math.round(b)}})}
+  ${cmpRow('Schlaf','sleep',w=>({v:D2[w].sleep,k:lvl(D2[w].sleep),t:D2[w].sleep}))}</div>`;
  const tile=k=>{const meta=CARDS.find(c=>c[0]===k),open=S.card==='pair'+k;
   const v=w=>{const d=D2[w],T=TODAYV[w];let big,sub,p=null;
    if(k==='sleep'){big=hmm(d.slp);sub='Schlafwert '+d.sleep;p=d.slp/T.need*100}
@@ -818,7 +825,7 @@ function pairHeute(di){const ws=['p1','p2'],A={p1:ampelData('p1',di),p2:ampelDat
    else{big=f1(d.kg)+' <small>kg</small>';sub='VO2max '+f0(d.vo2)}
    return`<div class="pcell"><div class="bigv" style="font-size:20px">${big}</div><div class="muted sm">${sub}</div>${p==null?'':meter(p,`var(${PERS[w].c})`)}</div>`};
   return`<button class="dcard pcard" style="--cc:var(${meta[2]})" data-w="pair" data-k="${k}" aria-expanded="${open}"><div class="dh2"><span class="ico">${ic(meta[3],16)}</span>${meta[1]}<span class="chev">${ic(open?'x':'next',16)}</span></div><div class="pair">${ws.map(v).join('')}</div></button>`};
- return`<section class="card pairc"><div class="muted sm" style="margin-bottom:10px">${PERS.p1.n} und ${PERS.p2.n} nebeneinander, ohne Wertung. Jede Person hat ihre eigene Skala.</div>${head}${heroes}<div class="pgrid">${CARDS.map(c=>tile(c[0])).join('')}</div></section><div class="cols">${ws.map(w=>`<section class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>${actRows(w,di)}</section>`).join('')}</div>`}
+ return`<section class="card pairc"><div class="muted sm" style="margin-bottom:10px">${PERS.p1.n} und ${PERS.p2.n} nebeneinander, ohne Wertung. Jede Person hat ihre eigene Skala.</div>${heroes}<div class="pgrid">${CARDS.map(c=>tile(c[0])).join('')}</div></section><div class="cols">${ws.map(w=>`<section class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>${actRows(w,di)}</section>`).join('')}</div>`}
 function pairPanel(k){const box=$('#dp-pair');if(!box)return;const n=ND+1,vis=S.dspan,ws=['p1','p2'];
  const F={sleep:['slp','Schlafdauer pro Nacht','group'],rec:['hrv','HRV','line'],act:['steps','Schritte pro Tag','group'],str:['stress','Ø Stresslevel pro Tag','group'],body:['vo2','VO2max','line']}[k],f=F[0];
  const fm={sleep:{y:v=>f1(v/60)+' h',t:hmm},rec:{y:f0,t:v=>f0(v)+' ms'},act:{y:f0,t:f0},str:{y:f0,t:f0},body:{y:f0,t:f0}}[k],kv=k==='sleep'?hmm:f0;
