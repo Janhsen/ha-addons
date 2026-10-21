@@ -474,6 +474,7 @@ button:focus:not(:focus-visible){outline:none}
 .tsheet .det .card{border:0;background:none;box-shadow:none;padding:4px 4px 0}
 .tsheet .det .dh{padding-right:52px}
 .fpop{right:62px}
+#zi,#zo{display:none!important}
 .dock{position:fixed!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;right:max(12px,env(safe-area-inset-right,0px))!important;left:auto!important;margin:0!important;z-index:20!important}
 .ov.bl{bottom:calc(var(--ins,0px) + 8px)}
 }
