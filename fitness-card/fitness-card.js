@@ -392,6 +392,7 @@ button:focus:not(:focus-visible){outline:none}
 .stack>#rcard,.stack>#acard,.stack>:nth-last-child(-n+3){grid-column:1/-1}
 .stack>.cols{grid-template-columns:minmax(0,1fr)}
 }
+.dday:first-child{border-top:0;margin-top:0;padding-top:0;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--sep)}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -557,6 +558,7 @@ const fc=v=>f1(v);
 function dayCurve(w,i,kind){const d=DAILY[w][i],r=rng(i*131+(w==='p1'?3:7)+kind.length),acts=ACTS.filter(a=>a.who===w&&dayOf(a.date)===i),now=i===ND?6.7:24;
  const inAct=h=>acts.find(a=>{const s=a.date.getHours()+a.date.getMinutes()/60,e=s+a.st.dur/3600;return h+1>s&&h<e});
  const arr=Array(24).fill(null);
+ if(kind==='steps'){const W=h=>h<6||h>=22?0:h<7?.4:h<10?1.6:h<12?1:h<14?1.4:h<17?.9:h<20?1.5:.7,ws=[];let tot=0;for(let h=0;h<24;h++){ws[h]=h>now?0:W(h)*(.7+.6*r())*(inAct(h)?2.4:1);tot+=ws[h]}for(let h=0;h<24;h++)arr[h]=h>now?null:Math.round(ws[h]/(tot||1)*d.steps);return arr}
  if(kind==='bb'){for(let h=0;h<=6&&h<=now;h++)arr[h]=Math.max(8,d.bb-(6-h)*(7+r()*2));let v=d.bb;for(let h=7;h<24&&h<=now;h++){if(h>=22)v+=2.5;else v-=2+d.stress/28+(inAct(h)?9:0)+r()*1.2;v=Math.max(6,Math.min(100,v));arr[h]=v}return arr}
  for(let h=0;h<24;h++){if(h>now)continue;const slp=h<6||h>=22,a=inAct(h);
   arr[h]=kind==='stress'?(slp?6+r()*6:Math.min(95,d.stress*(.7+.9*r())+(a?30:0))):(slp?d.rhr+1+r()*4:d.rhr+16+r()*12+(a?58+r()*22:0))}
@@ -565,7 +567,7 @@ function dayChart(box,vals,o){const W=Math.max(260,box.clientWidth||320),H=o.h||
  let g='';for(let q=0;q<=2;q++){const v=o.lo+(o.hi-o.lo)*q/2,y=Y(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${m.l-6}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${f0(v)}</text>`}
  let xl='';for(let h=0;h<=24;h+=6)xl+=`<text x="${m.l+h*sl}" y="${H-6}" text-anchor="${h===0?'start':h===24?'end':'middle'}" font-size="11" fill="var(--text2)">${h===24?'24':h} Uhr</text>`;
  let marks='';const pts=vals.map((v,h)=>v==null?null:[m.l+(h+.5)*sl,Y(v)]).filter(Boolean);
- if(o.bars)vals.forEach((v,h)=>{if(v==null)return;const lv=v<26?20:v<51?46:v<76?76:100;marks+=`<rect x="${(m.l+h*sl+1.5).toFixed(1)}" y="${Y(v).toFixed(1)}" width="${(sl-3).toFixed(1)}" height="${(H-m.b-Y(v)+4).toFixed(1)}" rx="3" fill="color-mix(in srgb,${o.c} ${lv}%,var(--surface2))"/>`});
+ if(o.bars)vals.forEach((v,h)=>{if(v==null)return;const lv=o.solid?100:v<26?20:v<51?46:v<76?76:100;marks+=`<rect x="${(m.l+h*sl+1.5).toFixed(1)}" y="${Y(v).toFixed(1)}" width="${(sl-3).toFixed(1)}" height="${(H-m.b-Y(v)+4).toFixed(1)}" rx="3" fill="color-mix(in srgb,${o.c} ${lv}%,var(--surface2))"/>`});
  else if(pts.length){marks+=`<path d="M${pts[0][0]},${H-m.b} ${pts.map(p=>'L'+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')} L${pts[pts.length-1][0]},${H-m.b} Z" fill="${o.c}" opacity=".16"/><polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="${o.c}" stroke-width="2.4" stroke-linejoin="round"/>`}
  box.style.position='relative';box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${o.aria||'Tagesverlauf'}">${g}${xl}${marks}</svg><div class="tip" hidden></div>`;
  const svg=$('svg',box),tip=$('.tip',box);svg.onpointermove=e=>{const r=svg.getBoundingClientRect(),h=Math.max(0,Math.min(23,Math.floor(((e.clientX-r.left)/r.width*W-m.l)/sl)));if(vals[h]==null){tip.hidden=true;return}tip.hidden=false;tip.style.left=Math.max(60,Math.min(W-60,m.l+(h+.5)*sl))+'px';tip.style.top=Y(vals[h])+'px';tip.innerHTML=hh2(h)+' Uhr<br>'+o.fmt(vals[h])};svg.onpointerleave=()=>{tip.hidden=true}}
@@ -660,7 +662,7 @@ const stat=r=>r>=75?'ok':r>=45?'warn':'bad';
 const dayLabel=i=>dfmt(dAt(i),{weekday:'short',day:'numeric',month:'numeric'});
 const hmm=m=>{m=Math.round(m);return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min'};
 const mix=(p,k)=>`color-mix(in srgb,var(${p}) ${k}%,var(--surface))`;
-const CARDS=[['sleep','Schlaf','--c-sleep','moon'],['rec','Erholung','--c-heart','heart'],['act','Aktivität','--c-act','run'],['str','Stress','--c-str','bolt'],['body','Körper','--c-body','body']];
+const CARDS=[['sleep','Schlaf','--c-sleep','moon'],['rec','Erholung','--c-heart','heart'],['act','Aktivität','--c-act','run'],['str','Stress','--c-str','bolt']];
 const ttl=a=>(a.live?'Live: ':'')+(a.sname||a.name);
 function stackBar(parts){const tot=parts.reduce((s,p)=>s+p.v,0)||1;return`<div class="zones">${parts.map(p=>`<i style="width:${Math.max(0,p.v/tot*100)}%;background:${p.c}"></i>`).join('')}</div>`}
 function legendRow(parts,fmt){return`<div class="lg">${parts.map(p=>`<span><i class="dot" style="background:${p.c}"></i>${p.n} ${fmt(p.v)}</span>`).join('')}</div>`}
@@ -778,13 +780,17 @@ function panel0(w,k){const box=$('#dp-'+w);if(!box)return;const n=ND+1,vis=S.dsp
   const sy=(x,y)=>x.scl.addEventListener('scroll',()=>{if(y.scl.scrollLeft!==x.scl.scrollLeft)y.scl.scrollLeft=x.scl.scrollLeft});sy(c1,c2);sy(c2,c1)}}
 
 function panel(w,k){panel0(w,k);dayBlock(w,k)}
-function dayBlock(w,k){const box=$('#dp-'+w);if(!box||k==='body')return;const di=S.day,dl=dfmt(dAt(di),{weekday:'long',day:'numeric',month:'long'}),T={sleep:'Schlafphasen in der Nacht zu '+dl,rec:'Body Battery am '+dl,act:'Herzfrequenz am '+dl,str:'Stress am '+dl}[k];
- box.insertAdjacentHTML('beforeend',`<div class="dday"><b>${T}</b><div class="chartbox" id="dd-${w}" style="margin-top:8px"></div><div class="muted sm" id="ddn-${w}" style="margin-top:6px"></div></div>`);
+let DAYSRC=null;
+function dayBlock(w,k){const box=$('#dp-'+w);if(!box||k==='body')return;const di=S.day,dl=dfmt(dAt(di),{weekday:'long',day:'numeric',month:'long'}),T={sleep:'Schlafphasen in der Nacht zu '+dl,rec:'Body Battery am '+dl,act:'Schritte am '+dl,str:'Stress am '+dl}[k];
+ box.insertAdjacentHTML(k==='act'?'afterbegin':'beforeend',`<div class="dday"><b>${T}</b><div class="chartbox" id="dd-${w}" style="margin-top:8px"></div><div class="muted sm" id="ddn-${w}" style="margin-top:6px"></div></div>`);
  const b=$('#dd-'+w,box),n=$('#ddn-'+w,box),d=DAILY[w][di],now=di===ND;
- if(k==='sleep'){hypno(b,w,di);n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.'}
- else if(k==='rec'){dayChart(b,dayCurve(w,di,'bb'),{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent='Body Battery lädt im Schlaf und entlädt sich durch Stress und Training.'+(now?' Bis jetzt: '+d.bb+' %.':'')}
- else if(k==='act'){const c=dayCurve(w,di,'hr'),v=c.filter(x=>x!=null);dayChart(b,c,{c:'var(--c-act)',lo:40,hi:190,fmt:x=>f0(x)+' bpm',aria:'Herzfrequenz im Tagesverlauf'});n.textContent=`Stundenmittel. Ruhe unter 100 bpm: ${v.filter(x=>x<100).length} h, erhöht 100 bis 130: ${v.filter(x=>x>=100&&x<130).length} h, Training über 130: ${v.filter(x=>x>=130).length} h.`}
- else{dayChart(b,dayCurve(w,di,'stress'),{c:'var(--c-str)',lo:0,hi:100,bars:true,fmt:x=>f0(x)+' Stresslevel',aria:'Stress im Tagesverlauf'});n.textContent='Je dunkler der Balken, desto höher der Stress. Nachts ist er niedrig, Training zählt als Aktivitätsstress.'}}
+ if(k==='sleep'){hypno(b,w,di);n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.';return}
+ const kind={rec:'bb',act:'steps',str:'stress'}[k];
+ const paint=R=>{if(!b.isConnected)return;const c=R?R[kind]:dayCurve(w,di,kind);if(!c||!c.some(x=>x!=null)){const dd=b.closest('.dday');if(dd)dd.remove();return}
+  if(k==='rec'){dayChart(b,c,{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent='Body Battery lädt im Schlaf und entlädt sich durch Stress und Training.'+(now?' Bis jetzt: '+d.bb+' %.':'')}
+  else if(k==='act'){const v=c.map(x=>x||0),sum=v.reduce((x,y)=>x+y,0),mx=Math.max(...v),hi=Math.max(500,Math.ceil(mx/500)*500),top=v.indexOf(mx);dayChart(b,c,{c:'var(--c-act)',lo:0,hi,bars:true,solid:true,fmt:x=>f0(x)+' Schritte',aria:'Schritte im Tagesverlauf'});n.textContent=`Schritte pro Stunde. Summe ${f0(sum)}${now?' bis jetzt':''}, Ziel ${f0(d.goal||10000)}.${mx>0?` Aktivste Stunde: ${top} bis ${top+1} Uhr mit ${f0(mx)} Schritten.`:''}`}
+  else{dayChart(b,c,{c:'var(--c-str)',lo:0,hi:100,bars:true,fmt:x=>f0(x)+' Stresslevel',aria:'Stress im Tagesverlauf'});n.textContent='Je dunkler der Balken, desto höher der Stress. Nachts ist er niedrig, Training zählt als Aktivitätsstress.'}};
+ if(DAYSRC){b.innerHTML='<div class="muted sm">Lade Tagesverlauf…</div>';DAYSRC(w,di).then(paint,e=>{console.log('DAYERR',e&&e.message);paint({})})}else paint(null)}
 /* ---------- Touren ---------- */
 const MON=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 function dayPreset(){return S.range?null:S.preset==='today'?[TODAY.getTime(),TODAY.getTime()+D]:S.preset==='yest'?[TODAY.getTime()-D,TODAY.getTime()]:null}
@@ -795,7 +801,7 @@ const MQ_M='(max-width:640px)',DET_PX={s:200,m:.46,l:.88};
 function insetPx(){const t=$('#tsheet'),mb=$('#mapbox');if(!t||!mb||!matchMedia(MQ_M).matches)return 0;const d=t.dataset.d,tgt=d==='s'?DET_PX.s:DET_PX[d]*innerHeight;return Math.max(0,Math.round(tgt-(innerHeight-mb.getBoundingClientRect().bottom)))}
 function layoutTour(){const m=matchMedia(MQ_M).matches,sw=$('.scrubwrap'),tsb=$('#tsb'),mc=$('.mapcol');if(!sw||!tsb||!mc)return;if(m&&sw.parentNode!==tsb)tsb.insertBefore(sw,tsb.firstChild);else if(!m&&sw.parentNode!==mc)mc.appendChild(sw)}
 let sheetMQ=false;
-function setDetent(d,refit){const t=$('#tsheet');if(!t)return;t.dataset.d=d;$('#grab').setAttribute('aria-expanded',String(d!=='s'));const mb=$('#mapbox');if(mb)mb.style.setProperty('--ins',insetPx()+'px');if(d!=='l'){const b=$('#tsb');if(b)b.scrollTop=0}if(refit&&S.sel){const a=byId[S.sel];if(a&&a.gps)fitList([a],60)}}
+function setDetent(d,refit){const t=$('#tsheet');if(!t)return;setTimeout(placePick,120);setTimeout(placePick,380);t.dataset.d=d;$('#grab').setAttribute('aria-expanded',String(d!=='s'));const mb=$('#mapbox');if(mb)mb.style.setProperty('--ins',insetPx()+'px');if(d!=='l'){const b=$('#tsb');if(b)b.scrollTop=0}if(refit&&S.sel){const a=byId[S.sel];if(a&&a.gps)fitList([a],60)}}
 function wireSheet(){const t=$('#tsheet'),g=$('#grab');if(!t||!g)return;
  if(!sheetMQ){sheetMQ=true;matchMedia(MQ_M).addEventListener('change',()=>{layoutTour();setDetent('m')})}
  const ord=['s','m','l'];let y0=null,moved=0;
@@ -899,11 +905,13 @@ function click(e){const r=mapCv.getBoundingClientRect(),px=e.clientX-r.left,py=e
  hit.sort((x,y)=>y[1].date-x[1].date);
  if(hit.length>1){S.pick=hit.map(h=>h[1]);pickSheet();drawMap();return}
  closePick();if(hit.length)select(hit[0][1].id,{fly:false})}
+function placePick(){const el=$('#pick'),mb=$('#mapbox'),t=$('#tsheet');if(!el||!mb)return;if(matchMedia(MQ_M).matches&&t){const mr=mb.getBoundingClientRect(),tr=t.getBoundingClientRect();el.style.bottom=Math.max(8,Math.round(mr.bottom-tr.top+8))+'px';el.style.maxHeight=Math.max(120,Math.round(tr.top-mr.top-16))+'px'}else{el.style.bottom='';el.style.maxHeight=''}}
 function closePick(){const el=$('#pick');if(el)el.remove();if(S.pick){S.pick=null;drawMap()}}
 function pickSheet(){let el=$('#pick');if(!el){el=document.createElement('div');el.id='pick';el.className='pick';$('#mapbox').appendChild(el)}
  el.innerHTML=`<div class="pickh"><b>${S.pick.length} Touren hier</b><button class="ib" id="pickx" aria-label="Schließen">${ic('close')}</button></div><div class="pickl">${S.pick.map(a=>`<button class="row" data-pid="${a.id}" aria-current="${a.id===S.sel}"><span class="av" style="background:var(${PERS[a.who].c})">${ic(a.sport,18)}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric',year:'2-digit'})}${S.who==='both'?' · '+PERS[a.who].n:''}</span></span><span class="r">${f1(a.st.dist/1000)} km<div class="muted sm" style="font-weight:400">${hm(a.st.dur)}</div></span></button>`).join('')}</div>`;
  el.onpointerdown=e=>e.stopPropagation();el.onwheel=e=>e.stopPropagation();$('#pickx').onclick=closePick;
- $$('[data-pid]',el).forEach(b=>{b.onclick=()=>{const id=b.dataset.pid;S.pick=null;el.remove();select(id,{fly:false});drawMap()};b.onmouseenter=()=>{};})}
+ $$('[data-pid]',el).forEach(b=>{b.onclick=()=>{const id=b.dataset.pid;S.pick=null;el.remove();select(id,{fly:false});drawMap()};b.onmouseenter=()=>{};});
+ if(matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d!=='s')setDetent('s');placePick();setTimeout(placePick,120);setTimeout(placePick,380)}
 
 /* Zeitstrahl */
 function axis(){const dp=dayPreset();if(dp)return dp;return[S.range?S.range[0].getTime():S.preset==='all'?START.getTime():TODAY.getTime()-(+S.preset||30)*D,S.range?S.range[1].getTime():TODAY.getTime()+D]}
@@ -1133,10 +1141,23 @@ async function loadLiveTracks(hass,who){
    st:{dist,dur,elapsed:dur,gain:0,loss:0,avgHR:at.heart_rate||0,maxHR:0,kcal:0,load:0,avgV:dur?dist/dur*3.6:0,maxV:0},liveAt:at.last_update||null,nopts:nopts,startAt:at.start||null};if(T)applyTr(o,T,true);out.push(o)}
  return out}
 async function refreshLive(hass,who){
- readAnalyse(hass,who);
+ DAYSRC=dayReal;readAnalyse(hass,who);
  const lv=await loadLiveTracks(hass,who);
  ACTS=ACTS.filter(a=>!a.live).concat(lv).sort((a,b)=>b.date-a.date);byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
  if(S&&S.sel&&!byId[S.sel])S.sel=null}
+/* Tagesverlauf aus dem HA-Recorder: Schritte je Stunde und Body Battery. Stress und Herzfrequenz liefert Garmin nicht als Tagesverlauf, dafür gibt es keine Kurve. */
+async function dayReal(w,di){const hass=HASSREF,out={};if(!hass||!hass.states)return out;
+ const u=UNAME[w],t0=dAt(di).getTime(),t1=Math.min(Date.now(),t0+864e5),H=36e5;
+ for(const [k,id] of [['steps','sensor.garmin_'+u+'_schritte'],['bb','sensor.garmin_'+u+'_body_battery']]){
+  try{const h=await hass.callWS({type:'history/history_during_period',start_time:new Date(t0).toISOString(),end_time:new Date(t1).toISOString(),entity_ids:[id],include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:true});
+   const rows=(h[id]||[]).map(x=>{const ts=x.lu!=null?x.lu*1000:x.lc!=null?x.lc*1000:Date.parse(x.last_updated||x.last_changed);return{t:Math.max(t0,ts),v:parseFloat(x.s!=null?x.s:x.state)}}).filter(x=>isFinite(x.t)&&isFinite(x.v)).sort((p,q)=>p.t-q.t);
+   if(!rows.length)continue;
+   const at=t=>{let v=null;for(const r of rows){if(r.t<=t)v=r.v;else break}return v},arr=Array(24).fill(null);
+   for(let i=0;i<24;i++){const a=t0+i*H,b=a+H;if(a>=t1)break;const e=at(Math.min(b,t1));
+    if(k==='steps'){if(e==null)continue;const p=at(a);let d=p==null?e:e-p;if(d<0)d=e;arr[i]=Math.round(d)}
+    else{const inH=rows.filter(r=>r.t>=a&&r.t<b).map(r=>r.v);const v=inH.length?inH.reduce((x,y)=>x+y,0)/inH.length:e;if(v!=null)arr[i]=v}}
+   out[k]=arr}catch(e){}}
+ return out}
 function readAnalyse(hass,who){const st=hass&&hass.states||{};for(const w of who){AZ[w]={};for(const k of['w0','w1','m0','m1','d30','y0']){const z=st['input_text.fitness_zeitraum_'+UNAME[w]+'_'+k];if(z&&z.state&&!['unknown','unavailable'].includes(z.state))AZ[w][k]=z.state}const g=n=>{const e=st['input_text.fitness_analyse_'+UNAME[w]+'_'+n];return e&&e.state&&!['unknown','unavailable'].includes(e.state)?e:null},e1=g(1),e2=g(2);AIT[w]=e1?{text:e1.state,more:e2&&e2.state.trim()!=='.'?' '+e2.state:'',when:new Date(e1.last_changed||e1.last_updated||Date.now())}:null}}
 function liveBanner(){
  const ls=ACTS.filter(a=>a.live&&persons().includes(a.who));if(!ls.length)return'';
