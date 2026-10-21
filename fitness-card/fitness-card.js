@@ -460,6 +460,24 @@ button:focus:not(:focus-visible){outline:none}
 .pc-bar{display:block;height:6px;border-radius:999px;background:var(--surface2);overflow:hidden}.pc-bar i{display:block;height:100%;border-radius:999px}
 .pc-l{border-top:1px solid var(--sep);align-self:stretch;display:flex;align-items:center}
 .whot .cmpb{padding:0;width:44px;justify-content:center}.whot .cmpb[aria-pressed="true"]{background:var(--text);color:var(--surface);border-color:var(--text)}
+/* Touren mobil nach Review: Karte fest, Blatt deckend, Stufen sauber */
+@media (max-width:640px){
+.tour .mapbox{position:fixed;top:var(--toph,132px);left:0;right:0;bottom:0;height:auto;min-height:0}
+.tsheet{height:calc(100dvh - var(--toph,132px) - 8px);background:var(--surface);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:0 -6px 24px rgba(0,0,0,.14)}
+.tsheet[data-d="s"]{--vis:calc(150px + env(safe-area-inset-bottom,0px))}
+.tsheet[data-d="l"]{--vis:calc(100dvh - var(--toph,132px) - 8px)}
+.tsheet .tsb,.tsheet[data-d="l"] .tsb{overflow-y:auto;padding-bottom:calc(100dvh - var(--toph,132px) - 8px - var(--vis,46dvh) + 84px)}
+.tsheet .rows{max-height:none;overflow:visible}
+.tsheet[data-d="s"][data-sel="0"] .list{visibility:hidden}
+.tsheet .mh{background:none;text-transform:none;letter-spacing:0;font-size:12px;padding:10px 4px 4px;position:static}
+.tsheet .tclose{top:0;right:12px}.tsheet[data-sel="1"] .det{margin-top:0}
+.tsheet .det .card{border:0;background:none;box-shadow:none;padding:4px 4px 0}
+.tsheet .det .dh{padding-right:52px}
+.fpop{right:62px}
+.dock{position:fixed!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;right:max(12px,env(safe-area-inset-right,0px))!important;left:auto!important;margin:0!important;z-index:20!important}
+.ov.bl{bottom:calc(var(--ins,0px) + 8px)}
+}
+@media (max-width:640px) and (prefers-color-scheme:dark){.tsheet{box-shadow:0 -8px 24px rgba(0,0,0,.45)}}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -901,21 +919,21 @@ function dayPreset(){return S.range?null:S.preset==='today'?[TODAY.getTime(),TOD
 function filtered(){const ps=persons(),dp=dayPreset(),lo=dp?new Date(dp[0]):S.range?S.range[0]:S.preset==='all'?new Date(0):new Date(TODAY.getTime()-((+S.preset||30)-1)*D),hi=dp?new Date(dp[1]):S.range?S.range[1]:new Date(TODAY.getTime()+D);return ACTS.filter(a=>ps.includes(a.who)&&(!S.sports.size||S.sports.has(a.sport))&&a.date>=lo&&a.date<hi)}
 let MV={x:0,y:0,z:5},mapCv,mctx,mW=0,mH=0,tween=null,raf=0;
 /* Touren-Fenster (Bottom-Sheet, Handy) */
-const MQ_M='(max-width:640px)',DET_PX={s:200,m:.46,l:.88};
-function insetPx(){const t=$('#tsheet'),mb=$('#mapbox');if(!t||!mb||!matchMedia(MQ_M).matches)return 0;const d=t.dataset.d,tgt=d==='s'?DET_PX.s:DET_PX[d]*innerHeight;return Math.max(0,Math.round(tgt-(innerHeight-mb.getBoundingClientRect().bottom)))}
+const MQ_M='(max-width:640px)',DET_PX={s:150,m:.46,l:.88};
+function insetPx(){const t=$('#tsheet'),mb=$('#mapbox');if(!t||!mb||!matchMedia(MQ_M).matches)return 0;const d=t.dataset.d,th=($('.top')||{}).offsetHeight||0,tgt=d==='s'?DET_PX.s:d==='l'?innerHeight-th-8:DET_PX[d]*innerHeight;return Math.max(0,Math.round(tgt-(innerHeight-mb.getBoundingClientRect().bottom)))}
 const isM=()=>matchMedia(MQ_M).matches;
 function fpills(){const a=$('#fps'),b=$('#fpd');if(!a||!b)return;const n=S.sports.size,pn={today:'Heute',yest:'Gestern',7:'7 Tage',30:'30 Tage',90:'90 Tage',all:'Alles'};
  a.innerHTML=(n===1?ic([...S.sports][0],16):'')+'<span>'+(n===0?'Alle Sportarten':n===1?SP[[...S.sports][0]].n:n+' Sportarten')+'</span>'+ic('next',14);
  b.innerHTML='<span>'+(S.range?dfmt(S.range[0],{day:'numeric',month:'numeric'})+(S.range[1]-S.range[0]>D?' bis '+dfmt(new Date(S.range[1]-D),{day:'numeric',month:'numeric'}):''):pn[S.preset]||'30 Tage')+'</span>'+ic('next',14)}
 function fpopClose(){const p=$('#fpop');if(p)p.hidden=true;$$('.fpill').forEach(x=>x.setAttribute('aria-expanded','false'))}
 function wireFilterBar(){fpills();const p=$('#fpop');if(!p)return;
- $$('.fpill').forEach(b=>b.onclick=()=>{const open=!p.hidden&&p.dataset.sec===b.dataset.sec;fpopClose();if(open)return;p.dataset.sec=b.dataset.sec;p.hidden=false;b.setAttribute('aria-expanded','true')});
+ $$('.fpill').forEach(b=>b.onclick=()=>{closePick();const open=!p.hidden&&p.dataset.sec===b.dataset.sec;fpopClose();if(open)return;p.dataset.sec=b.dataset.sec;p.hidden=false;b.setAttribute('aria-expanded','true')});
  $('#mapbox').addEventListener('pointerdown',e=>{if(!e.target.closest('.fpill,.fpop'))fpopClose()});
  $('#tclose').onclick=deselect}
 function deselect(){S.sel=null;S.cursor=null;if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}$$('.row').forEach(r=>r.setAttribute('aria-current','false'));detail();drawMap();drawScrub();curlab();setDetent('s');fitList(filtered().filter(a=>a.gps),50)}
 function layoutTour(){const m=matchMedia(MQ_M).matches,sw=$('.scrubwrap'),tsb=$('#tsb'),mc=$('.mapcol'),lh=$('.lhead'),fp=$('#fpop'),ls=$('.list');if(lh&&fp&&ls){if(m&&lh.parentNode!==fp)fp.appendChild(lh);else if(!m&&lh.parentNode!==ls)ls.insertBefore(lh,ls.firstChild)}if(!sw||!tsb||!mc)return;if(m&&sw.parentNode!==tsb)tsb.insertBefore(sw,tsb.firstChild);else if(!m&&sw.parentNode!==mc)mc.appendChild(sw)}
 let sheetMQ=false;
-function setDetent(d,refit){const t=$('#tsheet');if(!t)return;setTimeout(placePick,120);setTimeout(placePick,380);t.dataset.d=d;$('#grab').setAttribute('aria-expanded',String(d!=='s'));const mb=$('#mapbox');if(mb)mb.style.setProperty('--ins',insetPx()+'px');if(d!=='l'){const b=$('#tsb');if(b)b.scrollTop=0}if(refit&&S.sel){const a=byId[S.sel];if(a&&a.gps)fitList([a],60)}}
+function setDetent(d,refit){const t=$('#tsheet');if(!t)return;setTimeout(placePick,120);setTimeout(placePick,380);t.dataset.d=d;$('#grab').setAttribute('aria-expanded',String(d!=='s'));const mb=$('#mapbox');if(mb)mb.style.setProperty('--ins',insetPx()+'px');if(d!=='l'){const b=$('#tsb');if(b)b.scrollTop=0}if(d==='l')closePick();if(refit&&S.sel&&d!=='l'){const a=byId[S.sel];if(a&&a.gps)fitList([a],60)}}
 function wireSheet(){const t=$('#tsheet'),g=$('#grab');if(!t||!g)return;
  if(!sheetMQ){sheetMQ=true;matchMedia(MQ_M).addEventListener('change',()=>{layoutTour();setDetent('m')})}
  const ord=['s','m','l'];let y0=null,moved=0;
@@ -945,10 +963,10 @@ function vTour(){
  $('#zi').onclick=()=>zoomBy(1);$('#zo').onclick=()=>zoomBy(-1);$('#zf').onclick=()=>{fitList(filtered().filter(a=>a.gps),40)};
  const fl=filtered();if(!S.sel||!fl.find(a=>a.id===S.sel))S.sel=isM()?null:(fl.find(a=>a.gps)||fl[0]||{}).id||null;
  $('#tsheet').dataset.d=isM()&&!S.sel?'s':'m';
- layoutTour();wireSheet();wireFilterBar();sizeMap();buildRows();rangebar();legend();regions();
+ if(isM())scrollTo(0,0);layoutTour();wireSheet();wireFilterBar();sizeMap();buildRows();rangebar();legend();regions();
  if(S.sel){const a=byId[S.sel];if(a.gps)fitList([a],60,true);detail()}else fitList(fl.filter(a=>a.gps),40,true);
  drawMap();drawScrub();curlab()}
-function afterFilter(){const fl=filtered();if(!fl.find(a=>a.id===S.sel))S.sel=isM()?null:(fl.find(a=>a.gps)||fl[0]||{}).id||null;$$('#sports button').forEach(b=>b.setAttribute('aria-pressed',S.sports.has(b.dataset.s)));buildRows();rangebar();regions();detail();drawMap();drawScrub();curlab();const a=S.sel&&byId[S.sel];fitList(a&&a.gps?[a]:fl.filter(x=>x.gps),50)}
+function afterFilter(){closePick();const fl=filtered();if(!fl.find(a=>a.id===S.sel))S.sel=isM()?null:(fl.find(a=>a.gps)||fl[0]||{}).id||null;$$('#sports button').forEach(b=>b.setAttribute('aria-pressed',S.sports.has(b.dataset.s)));buildRows();rangebar();regions();detail();drawMap();drawScrub();curlab();const a=S.sel&&byId[S.sel];fitList(a&&a.gps?[a]:fl.filter(x=>x.gps),50)}
 const isoD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 function rangebar(){const b=$('#rangebar'),fl=filtered(),g=fl.filter(a=>a.gps),km=g.reduce((s,a)=>s+a.st.dist/1000,0),hh=fl.reduce((s,a)=>s+a.st.dur/3600,0),up=g.reduce((s,a)=>s+a.st.gain,0);
  b.innerHTML=`<div class="seg" id="presets">${[['today','Heute'],['yest','Gestern'],['7','7 Tage'],['30','30 Tage'],['90','90 Tage'],['all','Alles']].map(([k,n])=>`<button data-p="${k}" aria-pressed="${!S.range&&S.preset===k}">${n}</button>`).join('')}</div>`+`<label class="dl2">Von <input type="date" id="tf" min="${iso(0)}" max="${iso(ND)}" value="${isoD(new Date(axis()[0]))}"></label><label class="dl2">Bis <input type="date" id="tt" min="${iso(0)}" max="${iso(ND)}" value="${isoD(new Date(axis()[1]-D))}"></label>`+(S.range?`<button class="chip" id="clr">${dfmt(S.range[0],{day:'numeric',month:'numeric'})}${S.range[1]-S.range[0]>D?' bis '+dfmt(new Date(S.range[1]-D),{day:'numeric',month:'numeric'}):''} ${ic('x',14)}</button>`:'')+`<div class="kv sumkv"><div><b>${fl.length}</b><span>Aktivitäten</span></div><div><b>${f0(km)} km</b><span>Distanz</span></div><div><b>${f0(hh)} h</b><span>Zeit</span></div><div><b>${f0(up)} m</b><span>Aufstieg</span></div></div>`;
@@ -961,15 +979,16 @@ function buildRows(){const fl=filtered();let cur='',h='';
   h+=`<button class="row" data-id="${a.id}" aria-current="${a.id===S.sel}"><span class="av" style="background:var(${PERS[a.who].c})">${ic(a.sport,18)}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${a.date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}${S.who==='both'?' · '+PERS[a.who].n:''}${jointOf(a)?' · zu zweit':''}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<div class="muted sm" style="font-weight:400">${a.gps?hm(a.st.dur):''}</div></span></button>`}
  $('#rows').innerHTML=h||'<div class="card muted">Keine Aktivitäten im Filter.</div>';
  $('#rows').onclick=e=>{const b=e.target.closest('.row');if(b){select(b.dataset.id,{fly:true});if(innerWidth<641){const dt=$('#det');dt&&dt.scrollIntoView({behavior:'smooth',block:'start'})}}}}
-function select(id,o={}){fpopClose();if(matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d!=='m')setDetent('m');if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}S.sel=id;S.cursor=null;$$('.row').forEach(r=>r.setAttribute('aria-current',r.dataset.id===id));const r=$(`.row[data-id="${id}"]`);if(r&&!o.noScroll){const box=$('#rows'),t=r.offsetTop-box.offsetTop;if(t<box.scrollTop||t+r.offsetHeight>box.scrollTop+box.clientHeight)box.scrollTo({top:t-box.clientHeight/2,behavior:o.fast?'auto':'smooth'})}
- const a=byId[id];if(o.fly&&a.gps)fitList([a],60,o.fast);detail();drawMap();drawScrub();curlab()}
+function select(id,o={}){fpopClose();const wasS=matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d==='s';if(matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d!=='m')setDetent('m');if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}S.sel=id;S.cursor=null;$$('.row').forEach(r=>r.setAttribute('aria-current',r.dataset.id===id));const r=$(`.row[data-id="${id}"]`);if(r&&!o.noScroll){const box=$('#rows'),t=r.offsetTop-box.offsetTop;if(t<box.scrollTop||t+r.offsetHeight>box.scrollTop+box.clientHeight)box.scrollTo({top:t-box.clientHeight/2,behavior:o.fast?'auto':'smooth'})}
+ const a=byId[id];if((o.fly||wasS)&&a.gps)fitList([a],60,o.fast);detail();drawMap();drawScrub();curlab()}
 function curlab(){const a=byId[S.sel],ts=$('#tsheet');if(ts)ts.dataset.sel=a?'1':'0';$('#curlab').innerHTML=a?`<span class="dot" style="background:var(${PERS[a.who].c})"></span> ${esc(ttl(a))} <span class="muted sm" style="font-weight:400">· ${dfmt(a.date,{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</span>`:'Keine Auswahl';$('#pp').innerHTML=ic(S.play?'pause':'play')}
 function step(dir){const fl=filtered().slice().reverse(),i=fl.findIndex(a=>a.id===S.sel);if(!fl.length)return;const j=Math.max(0,Math.min(fl.length-1,i+dir));select(fl[j].id,{fly:true});return j!==i}
 function togglePlay(){S.play=!S.play;clearInterval(playT);if(S.play){const fl=filtered();if(fl[0]&&S.sel===fl[0].id)select(fl[fl.length-1].id,{fly:true});playT=setInterval(()=>{if(!step(1)){S.play=false;clearInterval(playT);curlab()}},1500)}curlab()}
 /* Karte */
 function sizeMap(){const b=$('#mapbox');if(!b)return;mW=b.clientWidth;mH=b.clientHeight;mapCv.width=mW*dpr;mapCv.height=mH*dpr}
 function fitList(list,pad,instant){if(!list.length)return;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const a of list)for(let i=0;i<a.w.length;i+=3){const[x,y]=a.w[i];x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
- const z=Math.max(3,Math.min(list.length===1?15.2:13,Math.log2(Math.min((mW-2*pad)/((x1-x0)||1e-6),(Math.max(120,mH-insetPx())-2*pad)/((y1-y0)||1e-6)))));go({x:(x0+x1)/2,y:(y0+y1)/2+insetPx()/2/2**z,z},instant)}
+ const z=Math.max(3,Math.min(list.length===1?15.2:13,Math.log2(Math.min((mW-2*pad)/((x1-x0)||1e-6),(Math.max(120,mH-insetPx()-topIns())-2*pad)/((y1-y0)||1e-6)))));go({x:(x0+x1)/2,y:(y0+y1)/2+(insetPx()-topIns())/2/2**z,z},instant)}
+const topIns=()=>matchMedia(MQ_M).matches?56:0;
 function go(t,instant){cancelAnimationFrame(tween&&tween.id);if(instant||matchMedia('(prefers-reduced-motion:reduce)').matches){MV=t;drawMap();return}
  const f=Object.assign({},MV),t0=performance.now(),ms=520;const tick=now=>{let k=Math.min(1,(now-t0)/ms);k=1-Math.pow(1-k,3);MV={x:f.x+(t.x-f.x)*k,y:f.y+(t.y-f.y)*k,z:f.z+(t.z-f.z)*k};drawMap();if(k<1)tween.id=requestAnimationFrame(tick)};tween={id:requestAnimationFrame(tick)}}
 function zoomBy(d){go({x:MV.x,y:MV.y,z:Math.max(3,Math.min(17,MV.z+d))})}
