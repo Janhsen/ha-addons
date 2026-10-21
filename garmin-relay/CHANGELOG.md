@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.109.0
+
+- LiveTrack: Eigene Sitzungen (zum Beispiel von deiner Uhr) bekommen jetzt auch den Sensor „LiveTrack <Name>“ mit deinem Namen. Er ist an, sobald die Sitzung gefunden wird, auch bevor der erste Trackpunkt da ist.
+
 ## 0.108.3
 
 - Positions-Tracker: Sie werden bei einem Neustart der App nicht mehr kurz „nicht verfügbar“. Bisher bekam danach auch eine alte Position einen neuen Zeitstempel, und eine Person sprang auf sie statt auf die aktuelle Handy-Position.
