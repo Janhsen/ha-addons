@@ -373,6 +373,12 @@ button:focus:not(:focus-visible){outline:none}
 :host([data-theme="dark"]){--text2:#A8B0BF}
 .emptyline{font-size:13px;color:var(--text2);padding:4px 0}
 @media (max-width:640px){.hero{flex-wrap:wrap}.hero>svg{order:1;flex:none}.hero>.traffic{order:2;margin-left:auto}.hero>div:not(.traffic){order:3;flex:1 1 100%}}
+/* Einordnung ruhig: wie die Kacheln, ohne Linie */
+.aibox{background:var(--surface2);border:0;border-radius:var(--r);padding:14px 16px}
+.aibox p{margin:0}.aibox .aisrc{margin-top:4px}
+.aibox .ainow{margin-top:12px!important;padding-top:0;border-top:0}
+.aibox>p:first-child.ainow{margin-top:0!important}
+.aibox.zr{margin:4px 0 12px}.aibox.zr p{margin-top:6px}
 `;
 const HTML=`<div class="wrap">
   <div class="top">
@@ -965,6 +971,8 @@ function heat(w,W){const weeks=Math.max(8,Math.min(W<520?20:26,Math.floor((W-34)
  const wd=['Mo','Mi','Fr'].map((t,i)=>`<text x="0" y="${18+i*2*(cell+gap)+cell-2}" font-size="11" fill="var(--text2)">${t}</text>`).join('');
  return`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Aktivitätskalender ${PERS[w].n}">${months}${wd}${rects}</svg>`}
 const iso=i=>{const d=dAt(i);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+let AZ={p1:{w0:'Diese Woche ist ruhiger als die davor: nur eine Tour, dafür guter Schlaf. Dein Körper hat Zeit zum Erholen. Für die nächste längere Einheit passen Freitag oder Samstag.',w1:'Letzte Woche war ausgewogen: Training und Erholung hielten sich die Waage. So kannst du weitermachen.',m0:'Dieser Monat läuft gut. Du bist regelmäßig unterwegs, ohne dich zu überfordern. Eine ruhige Woche zwischendurch hilft, das Niveau zu halten.'}};
+function zrBox(w,key){const t=AZ[w]&&AZ[w][key];if(!t||t==='.')return'';return`<div class="aibox zr"><div class="ailab">${ic('spark',16)}<b>Einordnung</b></div><p>${esc(t)}</p><div class="muted sm aisrc">Claude, heute früh</div></div>`}
 const RQ=[['w0','Diese Woche'],['w1','Letzte Woche'],['m0','Dieser Monat'],['m1','Letzter Monat'],['d30','Letzte 30 Tage'],['y0','Dieses Jahr']];
 function rIdx(k){const wd=(dAt(ND).getDay()+6)%7,mon=ND-wd,m0=Math.max(0,dayOf(new Date(TODAY.getFullYear(),TODAY.getMonth(),1))),pm=Math.max(0,dayOf(new Date(TODAY.getFullYear(),TODAY.getMonth()-1,1)));return{w0:[mon,ND],w1:[mon-7,mon-1],m0:[m0,ND],m1:[pm,m0-1],d30:[ND-29,ND],y0:[0,ND]}[k]}
 function rangeSum(w,a,b){const days=DAILY[w].slice(a,b+1),as=ACTS.filter(x=>x.who===w&&dayOf(x.date)>=a&&dayOf(x.date)<=b),av=f=>days.reduce((s,d)=>s+d[f],0)/(days.length||1),sm=f=>as.reduce((s,x)=>s+f(x),0);
@@ -977,7 +985,7 @@ function rangeCard(){const box=$('#rcard');if(!box)return;const r=S.rng||(S.rng=
   <div class="rangein"><label>Von <input type="date" id="rf" min="${iso(0)}" max="${iso(ND)}" value="${iso(r.a)}"></label><label>Bis <input type="date" id="rt" min="${iso(0)}" max="${iso(ND)}" value="${iso(r.b)}"></label><span class="muted sm">${L} Tage${okp?', verglichen mit den '+L+' Tagen davor':''}</span></div>
   ${ps.length>1?pairTable(r.a,r.b,pa,okp):''}<div class="cols" style="margin-top:14px" ${ps.length>1?'data-pm="1"':''}>${ps.map(w=>{const c=rangeSum(w,r.a,r.b),p=okp?rangeSum(w,pa,r.a-1):null,P=k=>p?p[k]:0,best=c.as.filter(x=>x.gps).sort((x,y)=>y.st.dist-x.st.dist)[0],mx={};for(const x of c.as)mx[x.sport]=(mx[x.sport]||0)+x.st.dur/3600;const e=Object.entries(mx).sort((x,y)=>y[1]-x[1]),mh=Math.max(...e.map(x=>x[1]),1);
    const T=[[c.n,'Aktivitäten',okp?(c.n-P('n')>0?'+':'')+(c.n-P('n'))+' gegen davor':''],[f0(c.dist)+' km','Distanz',dtx(c.dist,P('dist'))],[f0(c.asc)+' m','Aufstieg',dtx(c.asc,P('asc'))],[f1(c.dur)+' h','Zeit',dtx(c.dur,P('dur'))],[f0(c.load),'Trainingslast',dtx(c.load,P('load'))],[f0(c.steps),'Ø Schritte',dtx(c.steps,P('steps'))],[hmm(c.sleep),'Ø Schlaf',dtx(c.sleep,P('sleep'))],[f0(c.rhr)+' bpm','Ø Ruhepuls',dtx(c.rhr,P('rhr'))],[f0(c.hrv)+' ms','Ø HRV',dtx(c.hrv,P('hrv'))]];
-   return`<div class="card" style="box-shadow:none"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div><div class="kv">${T.map(([a,b,d],qi)=>KS[qi]?`<button class="kvb" data-w="${w}" data-kpi="${KS[qi]}" aria-pressed="${S.kpi===w+'|'+KS[qi]}"><b>${a}</b><span>${b}</span><span class="delta">${d}</span></button>`:`<div><b>${a}</b><span>${b}</span><span class="delta">${d}</span></div>`).join('')}</div>
+   return`<div class="card" style="box-shadow:none"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>${zrBox(w,r.key)}<div class="kv">${T.map(([a,b,d],qi)=>KS[qi]?`<button class="kvb" data-w="${w}" data-kpi="${KS[qi]}" aria-pressed="${S.kpi===w+'|'+KS[qi]}"><b>${a}</b><span>${b}</span><span class="delta">${d}</span></button>`:`<div><b>${a}</b><span>${b}</span><span class="delta">${d}</span></div>`).join('')}</div>
    ${e.length?`<div style="margin-top:12px">${e.map(([s,h])=>`<button class="srow" data-rsp="${w}|${s}" aria-expanded="${S.rsp===w+'|'+s}"><span>${ic(s,18)}${SP[s].n}</span><div class="bar"><i style="width:${h/mh*100}%;background:var(${PERS[w].c})"></i></div><b>${f1(h)} h</b></button>`).join('')}</div>`:'<div class="muted" style="margin-top:10px">Keine Aktivitäten im Zeitraum.</div>'}
    ${best?`<button class="arow" data-open="${best.id}" style="margin-top:6px"><span class="mr">${routeSvg(best)}</span><span class="t"><b>${esc(ttl(best))}</b><span class="muted sm">Längste Tour · ${dfmt(best.date,{weekday:'short',day:'numeric',month:'numeric'})}</span></span><span class="r">${f1(best.st.dist/1000)} km<span class="muted sm">${f0(best.st.gain)} m ↑</span></span>${ic('next',16)}</button>`:''}</div>`}).join('')}</div>
   <button class="btn p" id="ropen" style="margin-top:12px">Touren dieses Zeitraums auf der Karte</button>`;
@@ -1116,7 +1124,7 @@ async function refreshLive(hass,who){
  const lv=await loadLiveTracks(hass,who);
  ACTS=ACTS.filter(a=>!a.live).concat(lv).sort((a,b)=>b.date-a.date);byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
  if(S&&S.sel&&!byId[S.sel])S.sel=null}
-function readAnalyse(hass,who){const st=hass&&hass.states||{};for(const w of who){const g=n=>{const e=st['input_text.fitness_analyse_'+UNAME[w]+'_'+n];return e&&e.state&&!['unknown','unavailable'].includes(e.state)?e:null},e1=g(1),e2=g(2);AIT[w]=e1?{text:e1.state,more:e2&&e2.state.trim()!=='.'?' '+e2.state:'',when:new Date(e1.last_changed||e1.last_updated||Date.now())}:null}}
+function readAnalyse(hass,who){const st=hass&&hass.states||{};for(const w of who){AZ[w]={};for(const k of['w0','w1','m0','m1','d30','y0']){const z=st['input_text.fitness_zeitraum_'+UNAME[w]+'_'+k];if(z&&z.state&&!['unknown','unavailable'].includes(z.state))AZ[w][k]=z.state}const g=n=>{const e=st['input_text.fitness_analyse_'+UNAME[w]+'_'+n];return e&&e.state&&!['unknown','unavailable'].includes(e.state)?e:null},e1=g(1),e2=g(2);AIT[w]=e1?{text:e1.state,more:e2&&e2.state.trim()!=='.'?' '+e2.state:'',when:new Date(e1.last_changed||e1.last_updated||Date.now())}:null}}
 function liveBanner(){
  const ls=ACTS.filter(a=>a.live&&persons().includes(a.who));if(!ls.length)return'';
  return ls.map(a=>`<button class="arow card" data-open="${a.id}" style="width:100%;text-align:left;margin-bottom:14px"><span class="mr"><span class="av" style="background:var(${PERS[a.who].c})">${ic(a.sport,20)}</span></span><span class="t"><b><span class="ldot"></span>${PERS[a.who].n} ${a.nopts?'hat Live-Track gestartet':'ist live unterwegs'}</b><span class="muted sm">${a.nopts?esc(a.name)+(a.startAt?' · seit '+new Date(a.startAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'')+' · noch keine Punkte':esc(a.name)+' · '+SP[a.sport].n+(a.st.avgHR?' · '+f0(a.st.avgHR)+' bpm':'')}</span></span>${a.nopts?'':`<span class="r">${f1(a.st.dist/1000)} km<span class="muted sm">${hm(a.st.dur)}</span></span>`}${ic('next',16)}</button>`).join('')}
