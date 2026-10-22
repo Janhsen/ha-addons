@@ -226,7 +226,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .msg.ai{align-self:flex-start;background:var(--surface2)}
 form.ask{display:flex;gap:8px}
 form.ask input{flex:1;min-width:0;border:1px solid var(--sep);border-radius:999px;padding:9px 14px;background:var(--surface);color:var(--text);font:inherit;min-height:40px}
-.acwr{height:14px;border-radius:7px;position:relative;background:linear-gradient(90deg,var(--warn) 0 26%,var(--ok) 26% 62%,var(--bad) 62%)}
+.acwr{height:14px;border-radius:7px;position:relative;background:var(--surface2)}
 .acwr i{position:absolute;top:-4px;width:4px;height:22px;background:var(--text);border-radius:2px}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 
@@ -285,9 +285,6 @@ h1{font-size:28px}
 .prange{font-size:13px;color:var(--text2);margin:2px 0 6px}
 .rangein{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center;margin-top:10px}.rangein label,.dl2{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}.rangein input,.dl2 input{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--sep);border-radius:12px;padding:8px 10px;min-height:40px}.datebtn{position:relative;overflow:hidden}.datebtn input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
 
-.ampel{display:flex;gap:14px;align-items:center;border:1px solid var(--edge);border-radius:22px;padding:12px 14px;margin-bottom:12px;background:color-mix(in srgb,var(--surface) 92%,transparent)}
-.traffic{display:flex;flex-direction:column;gap:5px;background:var(--surface2);border-radius:999px;padding:7px;flex:none}.traffic i{width:16px;height:16px;border-radius:50%;background:var(--sep);display:block}
-.traffic i.on.bad{background:var(--bad)}.traffic i.on.warn{background:var(--warn)}.traffic i.on.ok{background:var(--ok)}
 .dday{margin-top:16px;border-top:1px solid var(--sep);padding-top:12px}
 button.srow{border:0;background:none;width:100%;text-align:left;font:inherit;color:inherit;min-height:44px;border-radius:12px}button.srow[aria-expanded="true"]{background:var(--surface2)}.tl{margin:2px 0 8px}
 .kv .kvb{border:0;background:none;text-align:left;font:inherit;color:inherit;display:flex;flex-direction:column;padding:6px 8px;margin:-6px -8px;border-radius:12px;min-height:44px}.kv .kvb[aria-pressed="true"]{background:var(--surface2)}
@@ -485,9 +482,13 @@ function createApp(host,root,opts){
 const $=(s,e=root)=>e.querySelector(s),$$=(s,e=root)=>[...e.querySelectorAll(s)];
 const D=864e5,dpr=Math.min(2,window.devicePixelRatio||1);
 const css=n=>getComputedStyle(host).getPropertyValue(n).trim();
-const f0=n=>Math.round(n).toLocaleString('de-DE'),f1=n=>n.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
+/* Lücken bleiben Lücken: fehlende Werte (null) werden als – gezeigt, nie ersetzt */
+const ok=v=>v!=null&&typeof v!=='boolean'&&isFinite(v),nn=a=>a.filter(ok);
+const sumA=a=>{const v=nn(a);return v.length?v.reduce((x,y)=>x+y,0):null},maxA=a=>{const v=nn(a);return v.length?Math.max(...v):null},minA=a=>{const v=nn(a);return v.length?Math.min(...v):null};
+const f0=n=>ok(n)?Math.round(n).toLocaleString('de-DE'):'–',f1=n=>ok(n)?n.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';
+const uv=(v,unit,f)=>ok(v)?(f||f0)(v)+unit:'–';
 const dfmt=(d,o)=>d.toLocaleDateString('de-DE',o);
-const hm=s=>{s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+':'+String(m).padStart(2,'0')+' h':m+' min'};
+const hm=s=>{if(!ok(s))return'–';s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+':'+String(m).padStart(2,'0')+' h':m+' min'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const IC={cmp:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',close:'<path d="M6 6l12 12M18 6L6 18"/>',mtb:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-8h5l3 8M10 8l3 8M9 6h3"/>',run:'<circle cx="14" cy="5" r="2"/><path d="M12 9l-3 3 3 2-2 5M12 9l4 2 3-1M12 14l4 1 1 4"/>',hike:'<path d="M3 19l6-10 4 6 2-3 6 7z"/>',ski:'<path d="M4 17l16-6M6 20l14-5"/><circle cx="9" cy="6" r="2"/><path d="M9 9l3 4"/>',swim:'<path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17M7 12l4-3 3 2"/><circle cx="16" cy="7" r="2"/>',yoga:'<circle cx="12" cy="5" r="2"/><path d="M12 8v5M7 20l5-7 5 7M6 11h12"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bolt:'<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',body:'<circle cx="12" cy="5.5" r="2"/><path d="M6 9h12M12 9v5M9 21l3-7 3 7"/>',calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',map:'<path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2zM9 4v14M15 6v14"/>',chart:'<path d="M5 20V10M12 20V4M19 20v-8"/>',play:'<path d="M8 5l11 7-11 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',send:'<path d="M4 12l16-8-6 16-3-7z"/>'};
@@ -563,8 +564,8 @@ ACTS=[...JA,...KA,...JT].sort((a,b)=>b.date-a.date);
 byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
 /* Tageswerte */
 TODAYV={
- p1:{steps:100,goal:7920,bb:71,rhr:51,rhr7:47,hrv:73,hrvW:84,sleep:82,stress:21,ready:97,status:'Peaking',vo2:54,kcal:595,slp:414,deep:131,light:228,rem:55,awake:4,need:400,sr:284,sl:94,sm:0,sh:0},
- p2:{steps:65,goal:10000,bb:89,rhr:51,rhr7:50,hrv:56,hrvW:56,sleep:87,stress:16,ready:79,status:'Maintaining',vo2:55,kcal:422,slp:448,deep:60,light:282,rem:106,awake:1,need:460,sr:355,sl:12,sm:0,sh:0}};
+ p1:{rlevel:'PRIME',rfac:[{n:'Schlaf (letzte Nacht)',pct:96,fb:'VERY_GOOD'},{n:'Erholungszeit',pct:100,fb:'GOOD',x:'0 h'},{n:'Belastung (akut/chronisch)',pct:91,fb:'GOOD',x:'412 akut'},{n:'Stressverlauf',pct:88,fb:'GOOD'},{n:'HRV',pct:95,fb:'VERY_GOOD',x:'84 ms Wochen-Ø'},{n:'Schlafverlauf',pct:82,fb:'MODERATE'}],steps:100,goal:7920,bb:71,rhr:51,rhr7:47,hrv:73,hrvW:84,sleep:82,stress:21,ready:97,status:'Peaking',vo2:54,kcal:595,slp:414,deep:131,light:228,rem:55,awake:4,need:400,sr:284,sl:94,sm:0,sh:0},
+ p2:{rlevel:'HIGH',rfac:[{n:'Schlaf (letzte Nacht)',pct:90,fb:'GOOD'},{n:'Erholungszeit',pct:100,fb:'GOOD',x:'0 h'},{n:'Belastung (akut/chronisch)',pct:84,fb:'GOOD'},{n:'Stressverlauf',pct:93,fb:'VERY_GOOD'},{n:'HRV',pct:70,fb:'MODERATE',x:'56 ms Wochen-Ø'},{n:'Schlafverlauf',pct:88,fb:'GOOD'}],steps:65,goal:10000,bb:89,rhr:51,rhr7:50,hrv:56,hrvW:56,sleep:87,stress:16,ready:79,status:'Maintaining',vo2:55,kcal:422,slp:448,deep:60,light:282,rem:106,awake:1,need:460,sr:355,sl:12,sm:0,sh:0}};
 DAILY={};
 for(const w of['p1','p2']){const r=rng(w==='p1'?5:9),T=TODAYV[w],days=[];
  const as=ACTS.filter(a=>a.who===w);
@@ -607,18 +608,19 @@ function ring(pct,color,val,label,sub){const R=32,C=2*Math.PI*R,p=Math.max(0,Mat
 function scrollChart(box,o){
  const W=Math.max(260,box.clientWidth||320),H=o.h||190,mL=46,mR=6,t=10,b=24,viewW=W-mL-mR,n=o.n,slot=viewW/o.vis,totalW=Math.max(viewW,n*slot),S0=o.series,line=o.mode==='line',k=S0.length;
  let lo,hi,tot=null;
- if(line){const all=S0.flatMap(s=>s.v).concat(o.band||[]),mn=Math.min(...all),mx=Math.max(...all),pd=(mx-mn)*.15||1;lo=mn-pd;hi=mx+pd}
- else{tot=Array.from({length:n},(_,i)=>o.mode==='stack'?S0.reduce((s,x)=>s+x.v[i],0):Math.max(...S0.map(x=>x.v[i])));hi=Math.max(...tot,o.goal||0)*1.1||1;lo=0}
+ if(line){const all=nn(S0.flatMap(s=>s.v).concat(o.band||[])),mn=all.length?Math.min(...all):0,mx=all.length?Math.max(...all):1,pd=(mx-mn)*.15||1;lo=mn-pd;hi=mx+pd}
+ else{tot=Array.from({length:n},(_,i)=>o.mode==='stack'?sumA(S0.map(x=>x.v[i])):maxA(S0.map(x=>x.v[i])));hi=Math.max(...nn(tot),ok(o.goal)?o.goal:0)*1.1||1;lo=0}
  const Y=v=>t+(1-(v-lo)/(hi-lo))*(H-t-b),yf=o.yfmt||f0;
  let yl='',gl='';for(let q=0;q<=3;q++){const v=lo+(hi-lo)*q/3,y=Y(v);yl+=`<text x="${mL-8}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${yf(v)}</text>`;gl+=`<line x1="0" x2="${totalW}" y1="${y}" y2="${y}" stroke="var(--grid)"/>`}
  const cid='cp'+Math.random().toString(36).slice(2,7),gap=slot>16?Math.min(10,slot*.24):1.5;
  let marks='';
  if(!line)for(let i=0;i<n;i++){let acc=0;S0.forEach((s,si)=>{let x,w;if(o.mode==='stack'){w=slot-gap;const wc=Math.min(w,k>1?w:24);x=i*slot+gap/2+(w-wc)/2;w=wc}else{w=(slot-gap)/k;const wc=Math.min(w,k>1?16:24);x=i*slot+gap/2+si*w+(w-wc)/2;w=Math.max(1,wc-(k>1?1.5:0))}
-  const h=s.v[i],y0=Y(o.mode==='stack'?acc+h:h),y1=o.mode==='stack'?Y(acc):H-b;acc+=h;const rx=(o.mode==='stack'&&k>1)?0:Math.min(5,w/2),ext=rx?rx:0;
+  const h=s.v[i];if(!ok(h))return;const y0=Y(o.mode==='stack'?acc+h:h),y1=o.mode==='stack'?Y(acc):H-b;acc+=h;const rx=(o.mode==='stack'&&k>1)?0:Math.min(5,w/2),ext=rx?rx:0;
   marks+=`<rect x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${Math.max(1,w).toFixed(1)}" height="${Math.max(0,y1-y0-(o.mode==='stack'&&si?1:0)+ext).toFixed(1)}" rx="${rx}" fill="${s.c}"/>`})}
- else{S0.forEach(s=>{marks+=`<polyline points="${s.v.map((v,i)=>((i+.5)*slot).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${s.c}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;if(slot>=12)marks+=s.v.map((v,i)=>`<circle cx="${((i+.5)*slot).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${slot>=30?3.5:2.5}" fill="${s.c}"/>`).join('')})}
+ else{S0.forEach(s=>{const segs=[];let cur=[];s.v.forEach((v,i)=>{if(ok(v))cur.push(((i+.5)*slot).toFixed(1)+','+Y(v).toFixed(1));else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur); /* Lücke = Linie unterbrochen */
+  marks+=segs.map(g=>g.length>1?`<polyline points="${g.join(' ')}" fill="none" stroke="${s.c}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`:'').join('');marks+=s.v.map((v,i)=>ok(v)&&(slot>=12||!ok(s.v[i-1])&&!ok(s.v[i+1]))?`<circle cx="${((i+.5)*slot).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${slot>=30?3.5:2.5}" fill="${s.c}"/>`:'').join('')})}
  const band=o.band?`<rect x="0" width="${totalW}" y="${Y(o.band[1])}" height="${Math.max(0,Y(o.band[0])-Y(o.band[1]))}" fill="var(--text)" opacity=".07"/>`:'';
- const goal=o.goal?`<line x1="0" x2="${totalW}" y1="${Y(o.goal)}" y2="${Y(o.goal)}" stroke="var(--text2)" stroke-dasharray="4 4"/>`:'';
+ const goal=ok(o.goal)&&o.goal?`<line x1="0" x2="${totalW}" y1="${Y(o.goal)}" y2="${Y(o.goal)}" stroke="var(--text2)" stroke-dasharray="4 4"/>`:'';
  const selr=o.sel>=0?`<rect x="${(o.sel*slot).toFixed(1)}" y="${t-4}" width="${slot.toFixed(1)}" height="${H-t-b+4}" rx="8" fill="var(--text)" opacity=".07"/>`:'';
  const ev=slot>=44?1:slot>=22?2:slot>=11?7:slot>=5?14:28;let xl='';for(let i=0;i<n;i++)if(i%ev===0||i===o.sel&&slot>=22)xl+=`<text x="${((i+.5)*slot).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="11" ${i===o.sel?'font-weight="700" fill="var(--text)"':'fill="var(--text2)"'}>${o.short(i)}</text>`;
  box.style.position='relative';
@@ -627,16 +629,16 @@ function scrollChart(box,o){
  let a0=o.pwin!=null?o.pwin:null;if(a0==null||(o.sel>=0&&(o.sel<a0||o.sel>a0+o.vis-1)))a0=o.sel>=0?clamp(Math.round(o.sel-(o.vis-1)/2),0,Math.max(0,n-o.vis)):Math.max(0,n-o.vis);
  scl.scrollLeft=a0*slot;
  const ix=e=>{const r=svg.getBoundingClientRect();return clamp(Math.floor((e.clientX-r.left)/slot),0,n-1)};
- svg.onpointermove=e=>{if(e.pointerType==='touch')return;const i=ix(e);tip.hidden=false;tip.style.left=clamp(scl.offsetLeft+(i+.5)*slot-scl.scrollLeft,70,W-70)+'px';tip.style.top=(line?Y(S0[0].v[i]):Y(tot[i]))+'px';tip.innerHTML=o.labels(i)+'<br>'+(o.mode==='stack'&&k>1?S0.map(s=>s.n+' '+(o.tfmt||f0)(s.v[i])).join(' · '):S0.map(s=>(k>1?s.n+' ':'')+(o.tfmt||f0)(s.v[i])).join(' · '))};
+ svg.onpointermove=e=>{if(e.pointerType==='touch')return;const i=ix(e);tip.hidden=false;tip.style.left=clamp(scl.offsetLeft+(i+.5)*slot-scl.scrollLeft,70,W-70)+'px';const tv=line?S0.map(s=>s.v[i]).find(ok):tot[i];tip.style.top=(ok(tv)?Y(tv):(H-b)/2)+'px';const tf=v=>ok(v)?(o.tfmt||f0)(v):'–';tip.innerHTML=o.labels(i)+'<br>'+(o.mode==='stack'&&k>1?S0.map(s=>s.n+' '+tf(s.v[i])).join(' · '):S0.map(s=>(k>1?s.n+' ':'')+tf(s.v[i])).join(' · '))};
  svg.onpointerleave=()=>{tip.hidden=true};
  if(o.onPick)svg.onclick=e=>o.onPick(ix(e));svg.style.cursor=o.onPick?'pointer':'default';
  let raf=0;const upd=()=>{const a=clamp(Math.round(scl.scrollLeft/slot),0,Math.max(0,n-o.vis));o.onWindow&&o.onWindow(a,Math.min(n-1,a+o.vis-1));tip.hidden=true};
  scl.addEventListener('scroll',()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(upd)},{passive:true});upd();
  return{scl,slot}}
 /* ---------- Insights ---------- */
-const avgA=a=>a.reduce((x,y)=>x+y,0)/(a.length||1);
+const avgA=a=>{const v=nn(a);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null};
 const ACW={};
-function acwrSeries(w){if(ACW[w])return ACW[w];const L=DAILY[w].map(d=>d.load);return ACW[w]=L.map((_,i)=>{let a=0,c=0;for(let k=0;k<28;k++){const v=L[i-k]||0;c+=v;if(k<7)a+=v}return c?a/(c/4):0})}
+function acwrSeries(w){if(ACW[w])return ACW[w];const L=DAILY[w].map(d=>d.load);return ACW[w]=L.map((_,i)=>{if(i<27)return null;let a=0,c=0;for(let k=0;k<28;k++){const v=L[i-k];if(!ok(v))return null;c+=v;if(k<7)a+=v}return c?a/(c/4):null})}
 const hh2=h=>String(Math.floor(h)).padStart(2,'0')+':'+String(Math.round(h%1*60)).padStart(2,'0');
 const tm=m=>{m=((Math.round(m)%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
 const fc=v=>f1(v);
@@ -669,14 +671,11 @@ function hypno(box,w,i){const st=stagesFor(w,i),tot=st.reduce((s,x)=>s+x.min,0),
  box.style.position='relative';box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Schlafphasen von ${tm(start)} bis ${tm(wake)}">${g}${x}${xl}</svg><div class="tip" hidden></div>`;
  const svg=$('svg',box),tip=$('.tip',box),cum=[];let c0=0;st.forEach(s=>{cum.push(c0);c0+=s.min});
  svg.onpointermove=e=>{const r=svg.getBoundingClientRect(),t=((e.clientX-r.left)/r.width*W-m.l)/(W-m.l-m.r)*tot;let j=cum.findIndex((c,q)=>t>=c&&t<c+st[q].min);if(j<0){tip.hidden=true;return}const s=st[j];tip.hidden=false;tip.style.left=Math.max(70,Math.min(W-70,X(cum[j]+s.min/2)))+'px';tip.style.top=(m.t+rows[s.k]*rowH)+'px';tip.innerHTML=nm[s.k]+' '+hm(s.min*60)+'<br>'+tm(start+cum[j])+' bis '+tm(start+cum[j]+s.min)};svg.onpointerleave=()=>{tip.hidden=true}}
-/* Urteil richtet sich nach Garmins Trainingsbereitschaft (Hoch ab 75, Mittel ab 50), die eigenen Werte erklären nur */
-function readyVerdict(d,f,st,tx){const r=d&&d.ready;if(!(r>0))return[st,tx];const g=r>=75?'ok':r>=50?'warn':'bad',off=f.filter(x=>x[1]!=='ok').map(x=>x[0]);
- const t='Trainingsbereitschaft laut Garmin: '+r+' ('+{ok:'hoch',warn:'mittel',bad:'niedrig'}[g]+').';return[g,t]}
-/* Erholungs-Ampel */
-function ampelHtml(w,di){const d=DAILY[w][di],T=TODAYV[w],h=DAILY[w].slice(Math.max(0,di-29),di+1).map(x=>x.hrv),m=avgA(h),sd=Math.sqrt(avgA(h.map(x=>(x-m)**2)))||1,ac=acwrSeries(w)[di];
- const f=[['Schlaf',d.slp>=T.need?'ok':d.slp>=T.need*.88?'warn':'bad',hmm(d.slp)+' von '+hmm(T.need)],['HRV',d.hrv>=m-.5*sd?'ok':d.hrv>=m-1.5*sd?'warn':'bad',d.hrv+' ms, Ø '+f0(m)],['Belastung',(LIVE&&di<27)?'ok':ac>=.8&&ac<=1.3?'ok':(ac<.8||ac<=1.5)?'warn':'bad',(LIVE&&di<27)?'noch zu wenig Verlauf':'Verhältnis '+ac.toFixed(2).replace('.',',')]];
- let st=f.some(x=>x[1]==='bad')?'bad':f.some(x=>x[1]==='warn')?'warn':'ok',tx='';[st,tx]=readyVerdict(d,f,st,tx);
- return`<div class="ampel"><div class="traffic" role="img" aria-label="Ampel ${st==='ok'?'grün':st==='warn'?'gelb':'rot'}"><i class="${st==='bad'?'on bad':''}"></i><i class="${st==='warn'?'on warn':''}"></i><i class="${st==='ok'?'on ok':''}"></i></div><div style="min-width:0"><b>Erholungs-Ampel</b><div class="muted sm">${tx}</div><div class="lg" style="margin-top:6px">${f.map(x=>`<span><i class="dot" style="background:var(--${x[1]})"></i>${x[0]}: ${x[2]}</span>`).join('')}</div></div></div>`}
+/* Garmins eigene Einstufung der Trainingsbereitschaft (Attribute des Sensors); die Karte bewertet nichts selbst */
+const RLV={PRIME:'Optimal',HIGH:'Hoch',MODERATE:'Mäßig',LOW:'Niedrig',POOR:'Schlecht'},RFB={VERY_GOOD:'sehr gut',GOOD:'gut',MODERATE:'mäßig',POOR:'schlecht',VERY_POOR:'sehr schlecht'};
+const rLevel=(w,di)=>{const T=TODAYV[w];if(di!==ND||!T||T.rlevel==null||T.rlevel==='')return null;return RLV[T.rlevel]||String(T.rlevel).toLowerCase()};
+const rFb=x=>x==null||x===''?null:(RFB[x]||String(x).toLowerCase());
+const rFacs=(w,di)=>di===ND&&TODAYV[w]&&Array.isArray(TODAYV[w].rfac)?TODAYV[w].rfac:[];
 /* Tempo pro Kilometer */
 function kmBars(box,a,W,m){const T=a.tr,rows=[];let from=0,k=1;for(let i=1;i<T.d.length;i++)if(T.d[i]>=k*1000){rows.push({k,v:(T.d[i]-T.d[from])/(T.t[i]-T.t[from])*3.6});from=i;k++}
  if(rows.length<2){box.innerHTML='<div class="muted sm">Zu kurz für ein Tempo pro Kilometer.</div>';return}
@@ -695,35 +694,36 @@ function recordsFor(w){const as=ACTS.filter(a=>a.who===w),g=as.filter(a=>a.gps),
  const lt=best(g,a=>a.st.dist,1),ma=best(g,a=>a.st.gain,1),fr=best(g.filter(a=>a.sport==='run'&&a.st.dist>=5000),a=>a.st.avgV,1),fb=best(g.filter(a=>a.sport==='mtb'&&a.st.dist>=20000),a=>a.st.avgV,1);
  if(lt)out.push(['Längste Tour',f1(lt.st.dist/1000)+' km',lt.date,'open',lt.id]);if(ma)out.push(['Meiste Höhenmeter',f0(ma.st.gain)+' m',ma.date,'open',ma.id]);
  if(fr)out.push(['Schnellster Lauf ab 5 km',pc(3600/fr.st.avgV)+' /km',fr.date,'open',fr.id]);if(fb)out.push(['Schnellste Rad-Tour ab 20 km',f1(fb.st.avgV)+' km/h',fb.date,'open',fb.id]);
- const idx=(f,dir)=>{let bi=0;d.forEach((x,i)=>{if(dir*f(x)>dir*f(d[bi]))bi=i});return bi};
- const rs=idx(x=>x.sleep,1),rr=idx(x=>x.rhr,-1),rh=idx(x=>x.hrv,1),rt=idx(x=>x.steps,1);
- out.push(['Bester Schlafwert',d[rs].sleep,dAt(rs),'day',rs],['Niedrigster Ruhepuls',d[rr].rhr+' bpm',dAt(rr),'day',rr],['Höchste HRV',d[rh].hrv+' ms',dAt(rh),'day',rh],['Meiste Schritte',f0(d[rt].steps),dAt(rt),'day',rt]);
- let streak=0,bs=0,be=0,cur=0;for(let i=0;i<d.length;i++){if(as.some(a=>dayOf(a.date)===i)){cur++;if(cur>bs){bs=cur;be=i}}else cur=0}
- out.push(['Längste Serie aktiver Tage',bs+' Tage',dAt(be),'day',be]);return out}
+ const idx=(k,dir)=>{let bi=-1;d.forEach((x,i)=>{if(ok(x[k])&&(bi<0||dir*x[k]>dir*d[bi][k]))bi=i});return bi}; /* Tage ohne Wert zählen nicht */
+ for(const[n,k,dir,un]of[['Bester Schlafwert','sleep',1,''],['Niedrigster Ruhepuls','rhr',-1,' bpm'],['Höchste HRV','hrv',1,' ms'],['Meiste Schritte','steps',1,'']]){const i=idx(k,dir);if(i>=0)out.push([n,f0(d[i][k])+un,dAt(i),'day',i])}
+ let bs=0,be=0,cur=0;for(let i=0;i<d.length;i++){if(!ok(d[i].dist)){cur=0;continue}if(as.some(a=>!a.live&&dayOf(a.date)===i)){cur++;if(cur>bs){bs=cur;be=i}}else cur=0}
+ if(bs)out.push(['Längste Serie aktiver Tage',bs+' Tage',dAt(be),'day',be]);return out}
 function recordsHtml(ps){return ps.map(w=>`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">Persönliche Rekorde 2026</span></div><div class="recs">${recordsFor(w).map(r=>`<button class="rec" ${r[3]==='open'?`data-open="${r[4]}"`:`data-day="${r[4]}"`}><span class="muted sm">${r[0]}</span><b>${r[1]}</b><span class="muted sm">${dfmt(r[2],{day:'numeric',month:'long'})}</span></button>`).join('')}</div></div>`).join('')}
 /* Zusammenhänge: Schlaf gegen Folgewerte */
 const ZY={stress:['Stress','stress',''],bb:['Body Battery','bb',' %'],ready:['Bereitschaft','ready',' %'],hrv:['HRV','hrv',' ms']};
 function pearson(x,y){const mx=avgA(x),my=avgA(y);let sxy=0,sxx=0,syy=0;for(let i=0;i<x.length;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)**2;syy+=(y[i]-my)**2}return sxx&&syy?sxy/Math.sqrt(sxx*syy):0}
 function scatterCard(ps){const box=$('#zcard');if(!box)return;const k=S.zy||'stress',Z=ZY[k];
- box.innerHTML=`<h2 class="h2">Zusammenhänge</h2><div class="muted sm" style="margin:-6px 0 10px">Schlafdauer der Nacht gegen den Wert am selben Tag. Jeder Punkt ist ein Tag.</div><div class="chips" id="zc" style="margin-bottom:10px">${Object.entries(ZY).map(([q,v])=>`<button class="chip" data-z="${q}" aria-pressed="${k===q}">${v[0]}</button>`).join('')}</div><div class="chartbox" id="zp"></div><div id="zt" style="margin-top:8px"></div>`;
+ box.innerHTML=`<h2 class="h2">Zusammenhänge</h2><div class="muted sm" style="margin:-6px 0 10px">Schlafdauer der Nacht gegen den Wert am selben Tag. Jeder Punkt ist ein Tag, r ist der Korrelationskoeffizient (−1 bis 1). Tage mit fehlendem Wert fehlen.</div><div class="chips" id="zc" style="margin-bottom:10px">${Object.entries(ZY).map(([q,v])=>`<button class="chip" data-z="${q}" aria-pressed="${k===q}">${v[0]}</button>`).join('')}</div><div class="chartbox" id="zp"></div><div id="zt" style="margin-top:8px"></div>`;
  $('#zc').onclick=e=>{const b=e.target.closest('[data-z]');if(b){S.zy=b.dataset.z;scatterCard(ps)}};
- const sets=ps.map(w=>({w,pts:DAILY[w].map((d,i)=>({x:d.slp/60,y:d[Z[1]],i}))})),all=sets.flatMap(s=>s.pts),X0=Math.min(...all.map(p=>p.x))-.2,X1=Math.max(...all.map(p=>p.x))+.2,Y0=Math.min(...all.map(p=>p.y)),Y1=Math.max(...all.map(p=>p.y)),yp=(Y1-Y0)*.1||1;
+ const sets=ps.map(w=>({w,pts:DAILY[w].map((d,i)=>({x:ok(d.slp)?d.slp/60:null,y:d[Z[1]],i})).filter(p=>ok(p.x)&&ok(p.y))})),all=sets.flatMap(s=>s.pts);
+ if(!all.length){$('#zp').innerHTML='<div class="muted sm">Keine Tage mit beiden Werten.</div>';$('#zt').innerHTML='';return}
+ const X0=Math.min(...all.map(p=>p.x))-.2,X1=Math.max(...all.map(p=>p.x))+.2,Y0=Math.min(...all.map(p=>p.y)),Y1=Math.max(...all.map(p=>p.y)),yp=(Y1-Y0)*.1||1;
  const bx=$('#zp'),W=Math.max(260,bx.clientWidth||320),H=240,m={l:46,r:10,t:10,b:30},X=v=>m.l+(v-X0)/(X1-X0)*(W-m.l-m.r),Y=v=>m.t+(1-(v-(Y0-yp))/((Y1+yp)-(Y0-yp)))*(H-m.t-m.b);
  let g='';for(let q=0;q<=3;q++){const v=(Y0-yp)+((Y1+yp)-(Y0-yp))*q/3;g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${m.l-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--text2)">${f0(v)}</text>`}
  for(let q=0;q<=4;q++){const v=X0+(X1-X0)*q/4;g+=`<text x="${X(v)}" y="${H-10}" text-anchor="middle" font-size="11" fill="var(--text2)">${f1(v)} h</text>`}
  let dots='',lines='',txt='';
  for(const s of sets){const c=`var(${PERS[s.w].c})`;dots+=s.pts.map(p=>`<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3.6" fill="${c}" opacity=".55" data-i="${p.i}" data-w="${s.w}"/>`).join('');
-  const xs=s.pts.map(p=>p.x),ys=s.pts.map(p=>p.y),r=pearson(xs,ys),mx=avgA(xs),my=avgA(ys),sx=Math.sqrt(avgA(xs.map(v=>(v-mx)**2)))||1,sy=Math.sqrt(avgA(ys.map(v=>(v-my)**2)));const sl=r*sy/sx;
+  if(s.pts.length<3)continue;const xs=s.pts.map(p=>p.x),ys=s.pts.map(p=>p.y),r=pearson(xs,ys),mx=avgA(xs),my=avgA(ys),sx=Math.sqrt(avgA(xs.map(v=>(v-mx)**2)))||1,sy=Math.sqrt(avgA(ys.map(v=>(v-my)**2)));const sl=r*sy/sx;
   lines+=`<line x1="${X(X0)}" y1="${Y(my+sl*(X0-mx))}" x2="${X(X1)}" y2="${Y(my+sl*(X1-mx))}" stroke="${c}" stroke-width="2.4"/>`;
-  const need=TODAYV[s.w].need/60,hi=s.pts.filter(p=>p.x>=need),lo2=s.pts.filter(p=>p.x<need),st=Math.abs(r)<.2?'kaum ein Zusammenhang':Math.abs(r)<.5?(r>0?'schwacher bis mittlerer Zusammenhang: mehr Schlaf, höherer Wert':'schwacher bis mittlerer Zusammenhang: mehr Schlaf, niedrigerer Wert'):(r>0?'deutlicher Zusammenhang: mehr Schlaf, höherer Wert':'deutlicher Zusammenhang: mehr Schlaf, niedrigerer Wert');
-  txt+=`<div style="margin:4px 0"><span class="dot" style="background:${c};margin-right:8px"></span><b>${PERS[s.w].n}</b> r = ${r.toFixed(2).replace('.',',')}, ${st}. ${hi.length&&lo2.length?`${Z[0]} im Schnitt ${f0(avgA(hi.map(p=>p.y)))}${Z[2]} nach Nächten ab ${hmm(need*60)}, ${f0(avgA(lo2.map(p=>p.y)))}${Z[2]} nach kürzeren.`:''}</div>`}
+  txt+=`<div style="margin:4px 0"><span class="dot" style="background:${c};margin-right:8px"></span><b>${PERS[s.w].n}</b> r = ${r.toFixed(2).replace('.',',')} (${s.pts.length} Tage)</div>`}
  bx.style.position='relative';bx.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Streudiagramm Schlafdauer gegen ${Z[0]}">${g}${dots}${lines}</svg><div class="tip" hidden></div>`;
  const svg=$('svg',bx),tip=$('.tip',bx);svg.onpointermove=e=>{const c=e.target.closest('circle');if(!c){tip.hidden=true;return}const p=DAILY[c.dataset.w][+c.dataset.i];tip.hidden=false;tip.style.left=Math.max(70,Math.min(W-70,+c.getAttribute('cx')))+'px';tip.style.top=c.getAttribute('cy')+'px';tip.innerHTML=PERS[c.dataset.w].n+', '+dfmt(dAt(c.dataset.i),{weekday:'short',day:'numeric',month:'numeric'})+'<br>'+hmm(p.slp)+' Schlaf, '+Z[0]+' '+f0(p[Z[1]])+Z[2]};svg.onpointerleave=()=>{tip.hidden=true};
  $('#zt').innerHTML=txt}
 /* Belastungsbalance im Verlauf */
-function acwrCard(ps){const box=$('#acard');if(!box)return;box.innerHTML=`<h2 class="h2">Belastungsbalance im Verlauf</h2><div class="muted sm" style="margin:-6px 0 8px">Trainingslast der letzten 7 Tage geteilt durch den 4-Wochen-Schnitt. Grauer Bereich 0,8 bis 1,3: gut dosiert. Orientierung, keine feste Grenze. Die ersten vier Wochen fehlen, weil der 4-Wochen-Schnitt erst dann steht.</div><div class="prange" id="ar"></div><div class="chartbox" id="ac"></div>`;
- const ser=ps.map(w=>({n:PERS[w].n,c:`var(${PERS[w].c})`,v:acwrSeries(w).slice(28)})),n=ND+1-28;
- scrollChart($('#ac'),{mode:'line',n,vis:42,h:200,series:ser,band:[.8,1.3],yfmt:v=>v.toFixed(1).replace('.',','),tfmt:v=>v.toFixed(2).replace('.',','),labels:i=>dfmt(dAt((i+28)),{weekday:'short',day:'numeric',month:'numeric'}),short:i=>dfmt(dAt((i+28)),{day:'numeric',month:'numeric'}),sel:-1,pwin:S.awin,aria:'Belastungsbalance',onWindow:(a,b)=>{S.awin=a;$('#ar').textContent=dfmt(dAt((a+28)),{day:'numeric',month:'long'})+' bis '+dfmt(dAt((b+28)),{day:'numeric',month:'long'})}})}
+function acwrCard(ps){const box=$('#acard');if(!box)return;const n=ND+1-28,ser=n>0?ps.map(w=>({n:PERS[w].n,c:`var(${PERS[w].c})`,v:acwrSeries(w).slice(28)})):[];
+ if(!ser.some(x=>x.v.some(ok))){box.hidden=true;box.innerHTML='';return}box.hidden=false;
+ box.innerHTML=`<h2 class="h2">Belastungsbalance im Verlauf</h2><div class="muted sm" style="margin:-6px 0 8px">Trainingslast der letzten 7 Tage geteilt durch den 4-Wochen-Schnitt. Nur Tage, für die 28 Tage Trainingslast vorliegen.</div><div class="prange" id="ar"></div><div class="chartbox" id="ac"></div>`;
+ scrollChart($('#ac'),{mode:'line',n,vis:42,h:200,series:ser,yfmt:v=>v.toFixed(1).replace('.',','),tfmt:v=>v.toFixed(2).replace('.',','),labels:i=>dfmt(dAt((i+28)),{weekday:'short',day:'numeric',month:'numeric'}),short:i=>dfmt(dAt((i+28)),{day:'numeric',month:'numeric'}),sel:-1,pwin:S.awin,aria:'Belastungsbalance',onWindow:(a,b)=>{S.awin=a;$('#ar').textContent=dfmt(dAt((a+28)),{day:'numeric',month:'long'})+' bis '+dfmt(dAt((b+28)),{day:'numeric',month:'long'})}})}
 
 /* ---------- v6: Pop-up-Fenster im Bubble-Stil ---------- */
 let SH=null;
@@ -743,96 +743,92 @@ function closeSheet(silent){const el=SH;if(!el)return;SH=null;const o=el._o;el.c
 function trapTab(e){if(e.key==='Tab'&&SH){const q=[...SH.querySelectorAll('button:not([disabled]),input,select,[tabindex]:not([tabindex="-1"])')].filter(x=>x.offsetParent!==null);if(!q.length)return;const cur=SH.getRootNode().activeElement,i=q.indexOf(cur);if(e.shiftKey&&(i<=0)){e.preventDefault();q[q.length-1].focus()}else if(!e.shiftKey&&(i===q.length-1||i<0)){e.preventDefault();q[0].focus()}}}
 
 /* ---------- Heute ---------- */
-const ST={ok:'Gut erholt',warn:'Mittel erholt',bad:'Erholung nötig'};
-const stat=r=>r>=75?'ok':r>=45?'warn':'bad';
 const dayLabel=i=>dfmt(dAt(i),{weekday:'short',day:'numeric',month:'numeric'});
-const hmm=m=>{m=Math.round(m);return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min'};
+const hmm=m=>{if(!ok(m))return'–';m=Math.round(m);return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min'};
 const mix=(p,k)=>`color-mix(in srgb,var(${p}) ${k}%,var(--surface))`;
 const CARDS=[['sleep','Schlaf','--c-sleep','moon'],['rec','Erholung','--c-heart','heart'],['act','Aktivität','--c-act','run'],['str','Stress','--c-str','bolt']];
 const ttl=a=>(a.live?'Live: ':'')+(a.sname||a.name);
-function stackBar(parts){const tot=parts.reduce((s,p)=>s+p.v,0)||1;return`<div class="zones">${parts.map(p=>`<i style="width:${Math.max(0,p.v/tot*100)}%;background:${p.c}"></i>`).join('')}</div>`}
-function legendRow(parts,fmt){return`<div class="lg">${parts.map(p=>`<span><i class="dot" style="background:${p.c}"></i>${p.n} ${fmt(p.v)}</span>`).join('')}</div>`}
-function meter(p,c){return`<div class="meter"><i style="width:${Math.max(0,Math.min(100,p))}%;background:${c}"></i></div>`}
+function stackBar(parts){const tot=sumA(parts.map(p=>p.v));if(!tot)return'<div class="zones"></div>';return`<div class="zones">${parts.filter(p=>ok(p.v)).map(p=>`<i style="width:${Math.max(0,p.v/tot*100)}%;background:${p.c}"></i>`).join('')}</div>`}
+function legendRow(parts,fmt){return`<div class="lg">${parts.map(p=>`<span><i class="dot" style="background:${p.c}"></i>${p.n} ${ok(p.v)?fmt(p.v):'–'}</span>`).join('')}</div>`}
+function meter(p,c){return`<div class="meter"><i style="width:${ok(p)?Math.max(0,Math.min(100,p)):0}%;background:${c}"></i></div>`}
 const sleepParts=d=>[{n:'Tief',v:d.deep,c:'var(--c-sleep)'},{n:'REM',v:d.rem,c:mix('--c-sleep',62)},{n:'Leicht',v:d.light,c:mix('--c-sleep',32)},{n:'Wach',v:d.awake,c:'var(--sep)'}];
 const stressParts=d=>[{n:'Ruhe',v:d.sr,c:mix('--c-str',18)},{n:'Niedrig',v:d.sl,c:mix('--c-str',46)},{n:'Mittel',v:d.sm,c:mix('--c-str',76)},{n:'Hoch',v:d.sh,c:'var(--c-str)'}];
 function cardHtml(w,k,d){const T=TODAYV[w],open=S.card===w+k,meta=CARDS.find(x=>x[0]===k);let big,sub,viz;
- if(k==='sleep'){big=hmm(d.slp);sub=`Schlafwert ${d.sleep} · Bedarf ${hmm(T.need)}`;const p=sleepParts(d);viz=stackBar(p)+legendRow(p.slice(0,3),v=>hm(v*60))}
- else if(k==='rec'){big=d.hrv+' <small>ms HRV</small>';sub=`Ruhepuls ${d.rhr} bpm · 7-Tage-Ø ${T.rhr7}`;viz=meter(d.bb,'var(--c-heart)')+`<div class="lg"><span>Body Battery ${d.bb} %</span><span>HRV-Ø Woche ${T.hrvW} ms</span></div>`}
- else if(k==='act'){big=f0(d.steps)+' <small>Schritte</small>';sub=`Ziel ${f0(T.goal)} · ${f0(d.steps/T.goal*100)} %`;viz=meter(d.steps/T.goal*100,'var(--c-act)')+`<div class="lg"><span>${f0(d.kcal)} kcal gesamt</span><span>${f1(d.dist)} km Training</span></div>`}
- else if(k==='body'){const w0=DAILY[w][Math.max(0,ND-30)].kg,dd=d.kg-w0;big=f1(d.kg)+' <small>kg</small>';sub=`VO2max ${f0(d.vo2)} · 30 Tage ${dd>=0?'+':'−'}${f1(Math.abs(dd))} kg`;viz=`<div class="lg"><span>Körperfett und Fitnessalter: noch keine Messwerte.</span></div>`}
- else{big=d.stress+' <small>Ø Level</small>';sub=d.stress<26?'Niedrig':d.stress<51?'Mittel':'Hoch';const p=stressParts(d);viz=stackBar(p)+legendRow(p.slice(0,2),v=>hm(v*60))}
+ if(k==='sleep'){big=hmm(d.slp);sub=`Schlafwert ${f0(d.sleep)}${ok(T.need)?' · Bedarf '+hmm(T.need):''}`;const p=sleepParts(d);viz=stackBar(p)+legendRow(p.slice(0,3),v=>hm(v*60))}
+ else if(k==='rec'){big=f0(d.hrv)+' <small>ms HRV</small>';sub=`Ruhepuls ${uv(d.rhr,' bpm')} · 7-Tage-Ø ${f0(T.rhr7)}`;viz=meter(d.bb,'var(--c-heart)')+`<div class="lg"><span>Body Battery ${uv(d.bb,' %')}</span><span>HRV-Ø Woche ${uv(T.hrvW,' ms')}</span></div>`}
+ else if(k==='act'){const gp=ok(T.goal)&&T.goal>0&&ok(d.steps)?d.steps/T.goal*100:null;big=f0(d.steps)+' <small>Schritte</small>';sub=`Ziel ${f0(T.goal)} · ${uv(gp,' %')}`;viz=meter(gp,'var(--c-act)')+`<div class="lg"><span>${f0(d.kcal)} kcal gesamt</span><span>${f1(d.dist)} km Training</span></div>`}
+ else if(k==='body'){const w0=DAILY[w][Math.max(0,ND-30)].kg,dd=ok(d.kg)&&ok(w0)?d.kg-w0:null;big=f1(d.kg)+' <small>kg</small>';sub=`VO2max ${f0(d.vo2)} · 30 Tage ${dd==null?'–':(dd>=0?'+':'−')+f1(Math.abs(dd))+' kg'}`;viz=`<div class="lg"><span>Körperfett und Fitnessalter: noch keine Messwerte.</span></div>`}
+ else{big=f0(d.stress)+' <small>Ø Level</small>';sub='Garmin-Stresslevel, Tagesmittel';const p=stressParts(d);viz=stackBar(p)+legendRow(p.slice(0,2),v=>hm(v*60))}
  return`<button class="dcard" style="--cc:var(${meta[2]})" data-w="${w}" data-k="${k}" aria-expanded="${open}"><div class="dh2"><span class="ico">${ic(meta[3],16)}</span>${meta[1]}<span class="chev">${ic(open?'x':'next',16)}</span></div><div class="bigv">${big}</div><div class="muted sm">${sub}</div>${viz}</button>`}
 /* Keine Einordnungen oder Tipps: nur noch die Stand-Zeile */
 function analyseHtml(w,di,stand){if(di!==ND||!stand)return'';return`<div class="muted sm stand">${stand}</div>`}
 let HV='c';const HVSW=false;
 function hvSwitch(){if(!HVSW)return'';return`<div class="hvsw" role="group" aria-label="Kopf-Entwurf">${[['o','Jetzt'],['a','A'],['b','B'],['c','C']].map(([k,n])=>`<button data-hv="${k}" aria-pressed="${HV===k}">${n}</button>`).join('')}</div>`}
-const lvl=v=>v>=60?'ok':v>=30?'warn':'bad';
-function gauge(v,size,sw,k,txt,fs){const R=(size-sw)/2-1,C=2*Math.PI*R,c=size/2;return`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="${sw}"/><circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="var(--${k})" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${(C*Math.max(0,Math.min(100,v))/100).toFixed(1)} ${C}" transform="rotate(-90 ${c} ${c})"/><text x="${c}" y="${c+fs*.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="var(--text)">${txt}</text></svg>`}
-const bbWord=v=>v>=60?'Viel Energie':v>=30?'Mittlere Energie':'Wenig Energie';
-function heroHtml(w,di,d,T,AD,r){const bb=bbNow(w,di),bk=bb==null?'ok':lvl(bb),R=44,C=2*Math.PI*R,sub=di===ND?'Trainingsstatus '+T.status+' · VO2max '+T.vo2:'Schlaf '+d.sleep+' · Body Battery '+d.bb+' %';
- if(HV==='a')return`<div class="hA"><button class="gk" data-ins="rdy" data-w="${w}" aria-label="Bereitschaft ${d.ready}, Details">${gauge(d.ready,64,7,r,d.ready,20)}<span><span class="muted sm">Bereitschaft</span><b>${ST[r]}</b></span></button>${bb==null?'':`<button class="gk" data-ins="bat" data-w="${w}" aria-label="Body Battery ${Math.round(bb)}, Details">${gauge(bb,64,7,bk,Math.round(bb),20)}<span><span class="muted sm">Body Battery</span><b>${bbWord(bb)}</b></span></button>`}</div><div class="muted sm hsub">${AD.tx}</div>`;
- if(HV==='b')return`<div class="hB"><div class="hbt"><span class="dot" style="background:var(--${r})"></span>${ST[r]}</div><div class="muted hbs">${AD.tx}</div><button class="mrow" data-ins="rdy" data-w="${w}"><span>Bereitschaft</span><div class="meter"><i style="width:${d.ready}%;background:var(--${r})"></i></div><b>${d.ready}</b>${ic('next',16)}</button>${bb==null?'':`<button class="mrow" data-ins="bat" data-w="${w}"><span>Body Battery</span><div class="meter"><i style="width:${bb}%;background:var(--${bk})"></i></div><b>${Math.round(bb)} %</b>${ic('next',16)}</button>`}</div>`;
- if(HV==='c')return`<div class="hC"><div class="hct"><span class="dot" style="background:var(--${r})"></span>${ST[r]}</div><div class="muted sm">${sub}</div><div class="hcr"><button data-ins="rdy" data-w="${w}">${gauge(d.ready,60,6,r,d.ready,18)}<span class="sm">Bereitschaft</span></button>${bb==null?'':`<button data-ins="bat" data-w="${w}">${gauge(bb,60,6,bk,Math.round(bb),18)}<span class="sm">Body Battery</span></button>`}<button class="dcard" data-w="${w}" data-k="sleep">${gauge(d.sleep,60,6,lvl(d.sleep),d.sleep,18)}<span class="sm">Schlaf</span></button></div><div class="muted sm hsub">${AD.tx}</div></div>`;
- return`<div class="hero"><button class="ringb" data-ins="rdy" data-w="${w}" aria-label="Bereitschaft ${d.ready} von 100, Details öffnen"><svg width="104" height="104" viewBox="0 0 104 104" aria-hidden="true"><circle cx="52" cy="52" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="10"/><circle cx="52" cy="52" r="${R}" fill="none" stroke="var(--${r})" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(C*d.ready/100).toFixed(1)} ${C}" transform="rotate(-90 52 52)"/><text x="52" y="58" text-anchor="middle" font-size="26" font-weight="700" fill="var(--text)">${d.ready}</text></svg></button>  <div><div class="muted sm">Bereitschaft</div><div class="big"><span class="dot" style="background:var(--${r})"></span>${ST[r]}</div><div class="muted sm" style="margin-top:4px">${di===ND?'Trainingsstatus '+T.status+' · VO2max '+T.vo2:'Schlaf '+d.sleep+' · Body Battery '+d.bb+' %'}</div><div class="muted sm" style="margin-top:8px">${AD.tx}</div></div>${bbRing(w,di)}</div>`}
-function personHeute(w,di){const d=DAILY[w][di],T=TODAYV[w],AD=ampelData(w,di),r=AD.st,as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),
+function gauge(v,size,sw,k,txt,fs){const R=(size-sw)/2-1,C=2*Math.PI*R,c=size/2;return`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="${sw}"/><circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="${k}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${(C*(ok(v)?Math.max(0,Math.min(100,v)):0)/100).toFixed(1)} ${C}" transform="rotate(-90 ${c} ${c})"/><text x="${c}" y="${c+fs*.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="var(--text)">${txt}</text></svg>`}
+/* Kopf: nur Garmins Zahlen und Garmins eigene Stufe, neutrale Farben */
+function heroHtml(w,di,d,T){const bb=bbNow(w,di),lv=rLevel(w,di),R=44,C=2*Math.PI*R,cR='var(--c-act)',cB='var(--c-heart)',cS='var(--c-sleep)',sub=di===ND?'Trainingsstatus '+T.status+' · VO2max '+f0(T.vo2):'Schlaf '+f0(d.sleep)+' · Body Battery '+uv(d.bb,' %'),head='Trainingsbereitschaft'+(lv?': '+esc(lv):'');
+ if(HV==='a')return`<div class="hA"><button class="gk" data-ins="rdy" data-w="${w}" aria-label="Bereitschaft ${f0(d.ready)}, Details">${gauge(d.ready,64,7,cR,f0(d.ready),20)}<span><span class="muted sm">Bereitschaft</span><b>${lv?esc(lv):'–'}</b></span></button><button class="gk" data-ins="bat" data-w="${w}" aria-label="Body Battery ${f0(bb)}, Details">${gauge(bb,64,7,cB,f0(bb),20)}<span><span class="muted sm">Body Battery</span><b>${uv(bb,' %')}</b></span></button></div>`;
+ if(HV==='b')return`<div class="hB"><div class="hbt">${head}</div><div class="muted hbs">${sub}</div><button class="mrow" data-ins="rdy" data-w="${w}"><span>Bereitschaft</span><div class="meter"><i style="width:${ok(d.ready)?d.ready:0}%;background:${cR}"></i></div><b>${f0(d.ready)}</b>${ic('next',16)}</button><button class="mrow" data-ins="bat" data-w="${w}"><span>Body Battery</span><div class="meter"><i style="width:${ok(bb)?bb:0}%;background:${cB}"></i></div><b>${uv(bb,' %')}</b>${ic('next',16)}</button></div>`;
+ if(HV==='c')return`<div class="hC"><div class="hct">${head}</div><div class="muted sm">${sub}</div><div class="hcr"><button data-ins="rdy" data-w="${w}">${gauge(d.ready,60,6,cR,f0(d.ready),18)}<span class="sm">Bereitschaft</span></button><button data-ins="bat" data-w="${w}">${gauge(bb,60,6,cB,f0(bb),18)}<span class="sm">Body Battery</span></button><button class="dcard" data-w="${w}" data-k="sleep">${gauge(d.sleep,60,6,cS,f0(d.sleep),18)}<span class="sm">Schlaf</span></button></div></div>`;
+ return`<div class="hero"><button class="ringb" data-ins="rdy" data-w="${w}" aria-label="Bereitschaft ${f0(d.ready)} von 100, Details öffnen">${gauge(d.ready,104,10,cR,f0(d.ready),26)}</button>  <div><div class="muted sm">Bereitschaft</div><div class="big">${lv?esc(lv):'–'}</div><div class="muted sm" style="margin-top:4px">${sub}</div></div>${bbRing(w,di)}</div>`}
+function personHeute(w,di){const d=DAILY[w][di],T=TODAYV[w],as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),
  ex=as.length?as:[ACTS.find(a=>a.who===w&&dayOf(a.date)<=di)].filter(Boolean),R=44,C=2*Math.PI*R;
  const open=CARDS.map(c=>c[0]).find(k=>S.card===w+k);
  return`<div class="pstack">${analyseHtml(w,di,`${di===ND?'Stand '+(LIVE?standHM(w):'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}`)}<section class="card">
- ${hvSwitch()}${heroHtml(w,di,d,T,AD,r)}
+ ${hvSwitch()}${heroHtml(w,di,d,T)}
  <div class="cg">${CARDS.map(c=>cardHtml(w,c[0],d)).join('')}</div>
  <h2 class="h2" style="margin-top:18px">${as.length?'Aktivitäten dieses Tages':'Zuletzt'}</h2>
  ${ex.length?ex.map(a=>`<button class="arow" data-open="${a.id}"><span class="mr">${routeSvg(a)||`<span class="av" style="background:var(${PERS[w].c})">${ic(a.sport,20)}</span>`}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${SP[a.sport].n}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<span class="muted sm">${a.gps?f0(a.st.gain)+' m ↑ · ':''}${hm(a.st.dur)}</span></span>${ic('next',16)}</button>`).join(''):'<div class="muted">Noch keine Aktivität.</div>'}</section></div>`}
-function weekSum(w,off){const d=DAILY[w],e=ND-off,s=d.slice(Math.max(0,e-6),e+1);return{dist:s.reduce((a,x)=>a+x.dist,0),asc:s.reduce((a,x)=>a+x.ascent,0),dur:s.reduce((a,x)=>a+x.dur,0),load:s.reduce((a,x)=>a+x.load,0),n:ACTS.filter(a=>a.who===w&&dayOf(a.date)>e-7&&dayOf(a.date)<=e).length}}
+function weekSum(w,off){const d=DAILY[w],e=ND-off,s=e<0?[]:d.slice(Math.max(0,e-6),e+1),cov=s.length===7&&s.every(x=>ok(x.dist));return{dist:cov?sumA(s.map(x=>x.dist)):null,asc:cov?sumA(s.map(x=>x.ascent)):null,dur:cov?sumA(s.map(x=>x.dur)):null,load:cov?sumA(s.map(x=>x.load)):null,n:cov?ACTS.filter(a=>a.who===w&&!a.live&&dayOf(a.date)>e-7&&dayOf(a.date)<=e).length:null}}
 function routeSvg(a){if(!a.w)return'';let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const[x,y]of a.w){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
  const s=Math.min(100/(x1-x0||1e-9),100/(y1-y0||1e-9)),ox=(120-(x1-x0)*s)/2,oy=(110-(y1-y0)*s)/2;
  return`<svg viewBox="0 0 120 110"><polyline fill="none" stroke="${col(a.who)}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="${a.w.filter((_,i)=>i%2===0).map(([x,y])=>((x-x0)*s+ox).toFixed(1)+','+((y-y0)*s+oy).toFixed(1)).join(' ')}"/></svg>`}
 /* ---------- v5: Ampel-Daten, Paar-Ansicht ---------- */
-const pc=s=>{s=Math.round(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const pc=s=>{if(!ok(s))return'–';s=Math.round(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 const KN2={dist:'Distanz in km',ascent:'Aufstieg in m',dur:'Zeit in h',load:'Trainingslast',steps:'Schritte',slp:'Schlafdauer',rhr:'Ruhepuls in bpm',hrv:'HRV in ms'};
-function ampelData(w,di){const d=DAILY[w][di],T=TODAYV[w],h=DAILY[w].slice(Math.max(0,di-29),di+1).map(x=>x.hrv),m=avgA(h),sd=Math.sqrt(avgA(h.map(x=>(x-m)**2)))||1,ac=acwrSeries(w)[di];
- const f=[['Schlaf',d.slp>=T.need?'ok':d.slp>=T.need*.88?'warn':'bad',hmm(d.slp)+' von '+hmm(T.need)],['HRV',d.hrv>=m*.9?'ok':d.hrv>=m*.75?'warn':'bad',d.hrv+' ms, Ø '+f0(m)],['Belastung',(LIVE&&di<27)?'ok':ac>=.8&&ac<=1.3?'ok':(ac<.8||ac<=1.5)?'warn':'bad',(LIVE&&di<27)?'noch zu wenig Verlauf':'Verhältnis '+ac.toFixed(2).replace('.',',')]];
- let st=f.some(x=>x[1]==='bad')?'bad':f.some(x=>x[1]==='warn')?'warn':'ok',tx='';[st,tx]=readyVerdict(d,f,st,tx);return{f,st,tx}}
 const bbNow=(w,di)=>di===ND&&TODAYV[w]&&TODAYV[w].bb!=null?TODAYV[w].bb:DAILY[w][di].bb;
-function bbRing(w,di){const v=bbNow(w,di);if(v==null)return'';const k=v>=60?'ok':v>=30?'warn':'bad',R=32,C=2*Math.PI*R;return`<button class="bbw" data-ins="bat" data-w="${w}" aria-label="Body Battery ${Math.round(v)} Prozent, Details öffnen"><svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="8"/><circle cx="40" cy="40" r="${R}" fill="none" stroke="var(--${k})" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(C*v/100).toFixed(1)} ${C}" transform="rotate(-90 40 40)"/><text x="40" y="46" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)">${Math.round(v)}</text></svg><span class="muted sm">Body Battery</span></button>`}
-function miniBars(vals,lab,col){const W=300,H=96,n=vals.length,bw=W/n,mx=Math.max(100,...vals);return`<svg viewBox="0 0 ${W} ${H+18}" width="100%" role="img" aria-label="Verlauf">${vals.map((v,i)=>`<rect x="${(i*bw+2).toFixed(1)}" y="${(H-v/mx*H).toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${(v/mx*H).toFixed(1)}" rx="3" fill="var(--${col(v)})"/>`).join('')}<text x="2" y="${H+14}" font-size="11" fill="var(--text2)">${lab[0]}</text><text x="${W-2}" y="${H+14}" text-anchor="end" font-size="11" fill="var(--text2)">${lab[1]}</text></svg>`}
-function openInsight(w,k){const di=S.day,d=DAILY[w][di],AD=ampelData(w,di),r=AD.st,now=di===ND,nm=PERS[w].n;
- const body=k==='rdy'?`<div class="ins"><div class="insbig"><b>${d.ready}</b><span><span class="dot" style="background:var(--${r})"></span> ${ST[r]}</span></div><p>${esc(AD.tx)}</p><div class="lg">${AD.f.map(x=>`<span><i class="dot" style="background:var(--${x[1]})"></i>${x[0]}: ${x[2]}</span>`).join('')}</div>
-  <h3 class="insh">Bereitschaft der letzten 14 Tage</h3>${miniBars(DAILY[w].slice(Math.max(0,di-13),di+1).map(x=>x.ready),[dayLabel(Math.max(0,di-13)),dayLabel(di)],stat)}
-  <h3 class="insh">So kommt der Wert zustande</h3><p class="muted">Garmin bewertet Schlaf, Erholung (HRV), Belastung der letzten Tage und Stress. Die Karte vergleicht das mit deinem eigenen Durchschnitt.</p></div>`
- :`<div class="ins"><div class="insbig"><b>${Math.round(bbNow(w,di))} %</b><span class="muted">${now?'jetzt':'Tagesmittel'}</span></div><p>${esc(bbText(w,di))}</p><div id="dp-${w}"></div>
+function bbRing(w,di){const v=bbNow(w,di);return`<button class="bbw" data-ins="bat" data-w="${w}" aria-label="Body Battery ${f0(v)} Prozent, Details öffnen">${gauge(v,80,8,'var(--c-heart)',f0(v),20)}<span class="muted sm">Body Battery</span></button>`}
+function miniBars(vals,lab,col){const W=300,H=96,n=vals.length,bw=W/(n||1),mx=Math.max(100,...nn(vals));return`<svg viewBox="0 0 ${W} ${H+18}" width="100%" role="img" aria-label="Verlauf">${vals.map((v,i)=>ok(v)?`<rect x="${(i*bw+2).toFixed(1)}" y="${(H-v/mx*H).toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${(v/mx*H).toFixed(1)}" rx="3" fill="${col}"><title>${lab[2]?lab[2](i)+': ':''}${f0(v)}</title></rect>`:'').join('')}<text x="2" y="${H+14}" font-size="11" fill="var(--text2)">${lab[0]}</text><text x="${W-2}" y="${H+14}" text-anchor="end" font-size="11" fill="var(--text2)">${lab[1]}</text></svg>`}
+function openInsight(w,k){const di=S.day,d=DAILY[w][di],now=di===ND,nm=PERS[w].n,lv=rLevel(w,di),fs=rFacs(w,di),i0=Math.max(0,di-13);
+ const body=k==='rdy'?`<div class="ins"><div class="insbig"><b>${f0(d.ready)}</b>${lv?`<span>${esc(lv)}</span>`:''}</div>${lv?'<p class="muted">Einstufung laut Garmin.</p>':''}
+  ${fs.length?`<h3 class="insh">Faktoren laut Garmin</h3><table class="tbl"><tr><th>Faktor</th><th>Anteil</th><th>Garmin</th></tr>${fs.map(x=>`<tr><td>${esc(x.n)}${x.x?` <span class="muted sm">${esc(x.x)}</span>`:''}</td><td style="white-space:nowrap">${ok(x.pct)?f0(x.pct)+' %':'–'}</td><td>${x.fb?esc(rFb(x.fb)):'–'}</td></tr>`).join('')}</table>`:''}
+  <h3 class="insh">Bereitschaft der letzten 14 Tage</h3>${miniBars(DAILY[w].slice(i0,di+1).map(x=>x.ready),[dayLabel(i0),dayLabel(di),i=>dayLabel(i0+i)],'var(--c-act)')}
+  <h3 class="insh">So kommt der Wert zustande</h3><p class="muted">Garmin berechnet die Trainingsbereitschaft selbst aus diesen Faktoren: Schlaf der letzten Nacht, Erholungszeit, Belastung (akut zu chronisch), Stressverlauf, HRV und Schlafverlauf. Die Karte zeigt Garmins Zahl und Einstufung unverändert${now?'':'; für frühere Tage liefert Garmin nur die Zahl'}.</p></div>`
+ :`<div class="ins"><div class="insbig"><b>${uv(bbNow(w,di),' %')}</b><span class="muted">${now?'jetzt':'Tagesmittel'}</span></div><p>${esc(bbText(w,di))}</p><div id="dp-${w}"></div>
   <h3 class="insh">Was die Body Battery beeinflusst</h3><p class="muted">Sie lädt sich im Schlaf und in Ruhe auf. Stress, Bewegung und Training entladen sie. Je höher der Wert am Morgen, desto mehr Spielraum hast du für den Tag.</p></div>`;
  openSheet({title:(k==='rdy'?'Bereitschaft: ':'Body Battery: ')+nm,icon:k==='rdy'?'spark':'bolt',color:k==='rdy'?'--c-act':'--c-heart',body,onClose:()=>{S.card=null;vHeute()}});
  if(k==='bat')dayBlock(w,'rec')}
-function bbText(w,di){const v=bbNow(w,di),d=DAILY[w][di];return di===ND?`Aktueller Wert von Garmin: ${Math.round(v)} %.`:`Tagesmittel: ${Math.round(d.bb)} %.`}
-const trafficHtml=st=>`<div class="traffic" role="img" aria-label="Ampel ${st==='ok'?'grün':st==='warn'?'gelb':'rot'}"><i class="${st==='bad'?'on bad':''}"></i><i class="${st==='warn'?'on warn':''}"></i><i class="${st==='ok'?'on ok':''}"></i></div>`;
+function bbText(w,di){const v=bbNow(w,di),d=DAILY[w][di];return di===ND?`Aktueller Wert von Garmin: ${uv(v,' %')}.`:`Tagesmittel: ${uv(d.bb,' %')}.`}
 function actRows(w,di){const as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),ex=as.length?as:[ACTS.find(a=>a.who===w&&dayOf(a.date)<=di)].filter(Boolean);
  return`<h2 class="h2" style="margin-top:6px">${as.length?'Aktivitäten dieses Tages':'Zuletzt'}</h2>`+(ex.length?ex.map(a=>`<button class="arow" data-open="${a.id}"><span class="mr">${routeSvg(a)||`<span class="av" style="background:var(${PERS[w].c})">${ic(a.sport,20)}</span>`}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${SP[a.sport].n}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<span class="muted sm">${a.gps?f0(a.st.gain)+' m ↑ · ':''}${hm(a.st.dur)}</span></span>${ic('next',16)}</button>`).join(''):'<div class="muted">Noch keine Aktivität.</div>')}
-function pairHeute(di){const ws=['p1','p2'],A={p1:ampelData('p1',di),p2:ampelData('p2',di)},D2={p1:DAILY.p1[di],p2:DAILY.p2[di]};
+function pairHeute(di){const ws=['p1','p2'],D2={p1:DAILY.p1[di],p2:DAILY.p2[di]};
  const head=`<div class="pair phead">${ws.map(w=>`<div class="who" style="margin:0"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>`).join('')}</div>`;
- const cmpRow=(lab,k,f)=>`<div class="pc-l">${lab}</div>${ws.map(w=>{const x=f(w);return x==null?'<div></div>':`<button class="pc-r" data-ins="${k}" data-w="${w}" aria-label="${lab} ${PERS[w].n} ${x.t}"><span class="pc-v"><span class="dot" style="background:var(--${x.k})"></span><b>${x.t}</b></span><span class="pc-bar"><i style="width:${Math.max(0,Math.min(100,x.v))}%;background:var(${PERS[w].c})"></i></span></button>`}).join('')}`;
- const heroes=`<div class="pcmp"><div></div>${ws.map(w=>{const r=A[w].st;return`<div class="pc-h"><b><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</b><span class="sm"><span class="dot" style="background:var(--${r})"></span>${ST[r]}</span></div>`}).join('')}
-  ${cmpRow('Bereitschaft','rdy',w=>({v:D2[w].ready,k:A[w].st,t:D2[w].ready}))}
-  ${cmpRow('Body Battery','bat',w=>{const b=bbNow(w,di);return b==null?null:{v:b,k:lvl(b),t:Math.round(b)}})}
-  ${cmpRow('Schlaf','sleep',w=>({v:D2[w].sleep,k:lvl(D2[w].sleep),t:D2[w].sleep}))}</div>`;
+ const cmpRow=(lab,k,f)=>`<div class="pc-l">${lab}</div>${ws.map(w=>{const x=f(w);return x==null?'<div></div>':`<button class="pc-r" data-ins="${k}" data-w="${w}" aria-label="${lab} ${PERS[w].n} ${x.t}"><span class="pc-v"><b>${x.t}</b></span><span class="pc-bar"><i style="width:${ok(x.v)?Math.max(0,Math.min(100,x.v)):0}%;background:var(${PERS[w].c})"></i></span></button>`}).join('')}`;
+ const heroes=`<div class="pcmp"><div></div>${ws.map(w=>{const lv=rLevel(w,di);return`<div class="pc-h"><b><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</b><span class="sm">${lv?'Garmin: '+esc(lv):'&nbsp;'}</span></div>`}).join('')}
+  ${cmpRow('Bereitschaft','rdy',w=>({v:D2[w].ready,t:f0(D2[w].ready)}))}
+  ${cmpRow('Body Battery','bat',w=>{const b=bbNow(w,di);return{v:b,t:f0(b)}})}
+  ${cmpRow('Schlaf','sleep',w=>({v:D2[w].sleep,t:f0(D2[w].sleep)}))}</div>`;
  const tile=k=>{const meta=CARDS.find(c=>c[0]===k),open=S.card==='pair'+k;
   const v=w=>{const d=D2[w],T=TODAYV[w];let big,sub,p=null;
-   if(k==='sleep'){big=hmm(d.slp);sub='Schlafwert '+d.sleep;p=d.slp/T.need*100}
-   else if(k==='rec'){big=d.hrv+' <small>ms HRV</small>';sub='Ruhepuls '+d.rhr+' bpm';p=d.bb}
-   else if(k==='act'){big=f0(d.steps)+' <small>Schritte</small>';sub=f0(d.steps/T.goal*100)+' % vom Ziel';p=d.steps/T.goal*100}
-   else if(k==='str'){big=d.stress+' <small>Ø Level</small>';sub=d.stress<26?'Niedrig':d.stress<51?'Mittel':'Hoch';p=d.stress}
+   if(k==='sleep'){big=hmm(d.slp);sub='Schlafwert '+f0(d.sleep);p=ok(d.slp)&&ok(T.need)&&T.need>0?d.slp/T.need*100:null}
+   else if(k==='rec'){big=f0(d.hrv)+' <small>ms HRV</small>';sub='Ruhepuls '+uv(d.rhr,' bpm');p=d.bb}
+   else if(k==='act'){big=f0(d.steps)+' <small>Schritte</small>';p=ok(d.steps)&&ok(T.goal)&&T.goal>0?d.steps/T.goal*100:null;sub=ok(p)?f0(p)+' % vom Ziel':'Ziel –'}
+   else if(k==='str'){big=f0(d.stress)+' <small>Ø Level</small>';sub='Garmin-Tagesmittel';p=d.stress}
    else{big=f1(d.kg)+' <small>kg</small>';sub='VO2max '+f0(d.vo2)}
-   return`<div class="pcell"><div class="bigv" style="font-size:20px">${big}</div><div class="muted sm">${sub}</div>${p==null?'':meter(p,`var(${PERS[w].c})`)}</div>`};
+   return`<div class="pcell"><div class="bigv" style="font-size:20px">${big}</div><div class="muted sm">${sub}</div>${!ok(p)?'':meter(p,`var(${PERS[w].c})`)}</div>`};
   return`<button class="dcard pcard" style="--cc:var(${meta[2]})" data-w="pair" data-k="${k}" aria-expanded="${open}"><div class="dh2"><span class="ico">${ic(meta[3],16)}</span>${meta[1]}<span class="chev">${ic(open?'x':'next',16)}</span></div><div class="pair">${ws.map(v).join('')}</div></button>`};
  return`<section class="card pairc"><div class="muted sm" style="margin-bottom:10px">${PERS.p1.n} und ${PERS.p2.n} nebeneinander, ohne Wertung. Jede Person hat ihre eigene Skala.</div>${heroes}<div class="pgrid">${CARDS.map(c=>tile(c[0])).join('')}</div></section><div class="cols">${ws.map(w=>`<section class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>${actRows(w,di)}</section>`).join('')}</div>`}
 function pairPanel(k){const box=$('#dp-pair');if(!box)return;const n=ND+1,vis=S.dspan,ws=['p1','p2'];
  const F={sleep:['slp','Schlafdauer pro Nacht','group'],rec:['hrv','HRV','line'],act:['steps','Schritte pro Tag','group'],str:['stress','Ø Stresslevel pro Tag','group'],body:['vo2','VO2max','line']}[k],f=F[0];
  const fm={sleep:{y:v=>f1(v/60)+' h',t:hmm},rec:{y:f0,t:v=>f0(v)+' ms'},act:{y:f0,t:f0},str:{y:f0,t:f0},body:{y:f0,t:f0}}[k],kv=k==='sleep'?hmm:f0;
- const lab=i=>dfmt(dAt(i),{weekday:'long',day:'numeric',month:'long'}),short=i=>{const d=dAt(i);return vis<=7?dfmt(d,{weekday:'short',day:'numeric'}).replace('.',''):dfmt(d,{day:'numeric',month:'numeric'})},avg=a=>a.reduce((x,y)=>x+y,0)/(a.length||1);
+ const lab=i=>dfmt(dAt(i),{weekday:'long',day:'numeric',month:'long'}),short=i=>{const d=dAt(i);return vis<=7?dfmt(d,{weekday:'short',day:'numeric'}).replace('.',''):dfmt(d,{day:'numeric',month:'numeric'})},avg=avgA;
  box.innerHTML=`<div class="dtop"><b>${CARDS.find(c=>c[0]===k)[1]}: ${F[1]}</b><div class="seg">${[[7,'Woche'],[30,'Monat'],[90,'3 Monate']].map(([x,t])=>`<button data-ds="${x}" aria-pressed="${vis===x}">${t}</button>`).join('')}</div></div><div class="lg" style="margin:6px 0">${ws.map(w=>`<span><i class="dot" style="background:var(${PERS[w].c})"></i>${PERS[w].n}</span>`).join('')}</div><div class="prange" id="pr"></div><div class="chartbox" id="pc1"></div><div class="ptab" id="pk" style="margin-top:10px"></div><div class="muted sm" style="margin-top:8px">Nach links wischen für frühere Tage. Auf einen Tag tippen, um ihn oben anzuzeigen.</div>`;
  const upd=(a,b)=>{S.pwin=a;$('#pr',box).textContent=dfmt(dAt(a),{day:'numeric',month:'long'})+' bis '+dfmt(dAt(b),{day:'numeric',month:'long',year:'numeric'});
-  const s=w=>DAILY[w].slice(a,b+1).map(d=>d[f]);$('#pk',box).innerHTML=`<div class="prow ph"><span></span>${ws.map(w=>`<span><i class="dot" style="background:var(${PERS[w].c})"></i>${PERS[w].n}</span>`).join('')}</div>`+[['Durchschnitt',x=>avg(x)],['Höchster Tag',x=>Math.max(...x)],['Niedrigster Tag',x=>Math.min(...x)]].map(([t,g])=>`<div class="prow"><span class="pl">${t}</span>${ws.map(w=>`<span class="pv"><b>${kv(g(s(w)))}</b></span>`).join('')}</div>`).join('')};
+  const s=w=>DAILY[w].slice(a,b+1).map(d=>d[f]);$('#pk',box).innerHTML=`<div class="prow ph"><span></span>${ws.map(w=>`<span><i class="dot" style="background:var(${PERS[w].c})"></i>${PERS[w].n}</span>`).join('')}</div>`+[['Durchschnitt',x=>avg(x)],['Höchster Tag',maxA],['Niedrigster Tag',minA]].map(([t,g])=>`<div class="prow"><span class="pl">${t}</span>${ws.map(w=>`<span class="pv"><b>${kv(g(s(w)))}</b></span>`).join('')}</div>`).join('')};
  scrollChart($('#pc1',box),{n,vis,labels:lab,short,sel:S.day,pwin:S.pwin,onPick:i=>{S.day=i;vHeute()},onWindow:upd,mode:F[2],h:k==='sleep'?190:170,series:ws.map(w=>({n:PERS[w].n,c:`var(${PERS[w].c})`,v:DAILY[w].map(d=>d[f])})),yfmt:fm.y,tfmt:fm.t,aria:F[1]+', '+PERS.p1.n+' und '+PERS.p2.n})}
-function kpiRows(c,p,okp){const P=k=>p?p[k]:0,dt=(a,b)=>okp&&b?(a>=b?'+':'')+Math.round((a-b)/b*100)+' %':'';return[['Aktivitäten',c.n,okp?(c.n-P('n')>0?'+':'')+(c.n-P('n')):'',null],['Distanz',f0(c.dist)+' km',dt(c.dist,P('dist')),'dist'],['Aufstieg',f0(c.asc)+' m',dt(c.asc,P('asc')),'ascent'],['Zeit',f1(c.dur)+' h',dt(c.dur,P('dur')),'dur'],['Trainingslast',f0(c.load),dt(c.load,P('load')),'load'],['Ø Schritte',f0(c.steps),dt(c.steps,P('steps')),'steps'],['Ø Schlaf',hmm(c.sleep),dt(c.sleep,P('sleep')),'slp'],['Ø Ruhepuls',f0(c.rhr)+' bpm',dt(c.rhr,P('rhr')),'rhr'],['Ø HRV',f0(c.hrv)+' ms',dt(c.hrv,P('hrv')),'hrv']]}
+function kpiRows(c,p,okp){const P=k=>p?p[k]:null,dt=(a,b)=>pct(okp,a,b);return[['Aktivitäten',f0(c.n),okp&&ok(c.n)&&ok(P('n'))?(c.n-P('n')>0?'+':'')+(c.n-P('n')):'',null],['Distanz',uv(c.dist,' km'),dt(c.dist,P('dist')),'dist'],['Aufstieg',uv(c.asc,' m'),dt(c.asc,P('asc')),'ascent'],['Zeit',uv(c.dur,' h',f1),dt(c.dur,P('dur')),'dur'],['Trainingslast',f0(c.load),dt(c.load,P('load')),'load'],['Ø Schritte',f0(c.steps),dt(c.steps,P('steps')),'steps'],['Ø Schlaf',hmm(c.sleep),dt(c.sleep,P('sleep')),'slp'],['Ø Ruhepuls',uv(c.rhr,' bpm'),dt(c.rhr,P('rhr')),'rhr'],['Ø HRV',uv(c.hrv,' ms'),dt(c.hrv,P('hrv')),'hrv']]}
+/* Veränderung in Prozent, nur wenn beide Seiten echte Werte haben */
+const pct=(okp,a,b)=>okp&&ok(a)&&ok(b)&&b?(a>=b?'+':'')+Math.round((a-b)/b*100)+' %':'';
 function pairTable(a,b,pa,okp){const ws=['p1','p2'],R=ws.map(w=>kpiRows(rangeSum(w,a,b),okp?rangeSum(w,pa,a-1):null,okp));
  return`<div class="ptab" style="margin-top:14px"><div class="prow ph"><span></span>${ws.map(w=>`<span><i class="dot" style="background:var(${PERS[w].c})"></i>${PERS[w].n}</span>`).join('')}</div>${R[0].map((r,i)=>{const q=R[1][i],inner=`<span class="pl">${r[0]}</span>${[r,q].map(x=>`<span class="pv"><b>${x[1]}</b><span class="delta">${x[2]?x[2]+' gegen davor':''}</span></span>`).join('')}`;return r[3]?`<button class="prow" data-kpi="${r[3]}" data-w="pair" aria-pressed="${S.kpi==='pair|'+r[3]}">${inner}</button>`:`<div class="prow">${inner}</div>`}).join('')}</div>`}
 function recordsPairHtml(){const ws=['p1','p2'],R=ws.map(recordsFor),labels=[...new Set([...R[0],...R[1]].map(x=>x[0]))];
@@ -853,25 +849,25 @@ function vHeute(){const v=$('#view'),di=S.day;
   if(w0){const meta=CARDS.find(c=>c[0]===k0);openSheet({title:meta[1]+(w0==='pair'?': '+PERS.p1.n+' und '+PERS.p2.n:': '+PERS[w0].n),icon:meta[3],color:meta[2],body:`<div id="dp-${w0}"></div>`,onClose:()=>{S.card=null;vHeute()},onClick:e=>{const sp=e.target.closest('[data-ds]');if(sp){S.dspan=+sp.dataset.ds;S.pwin=null;vHeute();return true}}});if(w0==='pair')pairPanel(k0);else panel(w0,k0)}else{const ik=persons().map(w=>[w,['rdy','bat'].find(k=>S.card===w+k)]).find(x=>x[1]);if(ik)openInsight(ik[0],ik[1]);else closeSheet(true)}}}
 function panel0(w,k){const box=$('#dp-'+w);if(!box)return;const n=ND+1,vis=S.dspan,days=DAILY[w],meta=CARDS.find(x=>x[0]===k),T=TODAYV[w];
  const lab=i=>dfmt(dAt(i),{weekday:'long',day:'numeric',month:'long'}),short=i=>{const d=dAt(i);return vis<=7?dfmt(d,{weekday:'short',day:'numeric'}).replace('.',''):dfmt(d,{day:'numeric',month:'numeric'})};
- const pick=i=>{S.day=i;vHeute()},avg=a=>a.reduce((x,y)=>x+y,0)/(a.length||1),col2=(f)=>days.map(d=>d[f]);
+ const pick=i=>{S.day=i;vHeute()},avg=avgA,col2=(f)=>days.map(d=>d[f]);
  const titles={sleep:'Schlafdauer pro Nacht',rec:'HRV und Ruhepuls',act:'Schritte pro Tag',str:'Ø Stresslevel pro Tag',body:'Gewicht und VO2max'};
  box.innerHTML=`<div class="dtop"><b>${meta[1]}: ${titles[k]}</b><div class="seg">${[[7,'Woche'],[30,'Monat'],[90,'3 Monate']].map(([x,t])=>`<button data-ds="${x}" aria-pressed="${vis===x}">${t}</button>`).join('')}</div></div><div class="prange" id="pr"></div><div class="chartbox" id="pc1"></div>${k==='rec'||k==='body'?'<div class="chartbox" id="pc2" style="margin-top:6px"></div>':''}<div class="kv" id="pk" style="margin-top:12px"></div><div class="muted sm" style="margin-top:8px">Nach links wischen für frühere Tage. Auf einen Tag tippen, um ihn oben anzuzeigen.${(typeof LIVE!=='undefined'&&LIVE)?'':' Echte Verlaufsdaten gibt es erst ab 18.10., davor Beispieldaten.'}</div>`;
  let kvf,c1;const sel=S.day,upd=(a,b)=>{S.pwin=a;const sl=days.slice(a,b+1);$('#pr',box).textContent=dfmt(dAt(a),{day:'numeric',month:'long'})+' bis '+dfmt(dAt(b),{day:'numeric',month:'long',year:'numeric'});$('#pk',box).innerHTML=kvf(sl).map(([x,y])=>`<div><b>${x}</b><span>${y}</span></div>`).join('')};
  const base={n,vis,labels:lab,short,sel,pwin:S.pwin,onPick:pick,onWindow:upd};
  if(k==='sleep'){const cs=['var(--c-sleep)',mix('--c-sleep',62),mix('--c-sleep',32),'var(--sep)'];
-  kvf=sl=>[[hmm(avg(sl.map(d=>d.slp))),'Ø Schlafdauer'],[f0(avg(sl.map(d=>d.sleep))),'Ø Schlafwert'],[hmm(avg(sl.map(d=>d.deep))),'Ø Tiefschlaf'],[hmm(Math.max(...sl.map(d=>d.slp))),'Längste Nacht']];
+  kvf=sl=>[[hmm(avg(sl.map(d=>d.slp))),'Ø Schlafdauer'],[f0(avg(sl.map(d=>d.sleep))),'Ø Schlafwert'],[hmm(avg(sl.map(d=>d.deep))),'Ø Tiefschlaf'],[hmm(maxA(sl.map(d=>d.slp))),'Längste Nacht']];
   c1=scrollChart($('#pc1',box),{...base,mode:'stack',series:[['deep','Tief'],['rem','REM'],['light','Leicht'],['awake','Wach']].map(([f,nm],j)=>({n:nm,c:cs[j],v:col2(f)})),yfmt:v=>f1(v/60)+' h',tfmt:hmm,goal:T.need,aria:'Schlafdauer pro Nacht'})}
- else if(k==='rec'){const h=col2('hrv'),m=avg(h),sd=Math.sqrt(avg(h.map(x=>(x-m)**2)));
-  kvf=sl=>[[f0(avg(sl.map(d=>d.hrv)))+' ms','Ø HRV'],[f0(avg(sl.map(d=>d.rhr)))+' bpm','Ø Ruhepuls'],[f0(avg(sl.map(d=>d.bb)))+' %','Ø Body Battery'],[f0(Math.min(...sl.map(d=>d.rhr)))+' bpm','Niedrigster Ruhepuls']];
-  c1=scrollChart($('#pc1',box),{...base,mode:'line',h:150,series:[{n:'HRV',c:'var(--c-heart)',v:h}],band:[m-sd,m+sd],tfmt:v=>f0(v)+' ms',aria:'HRV Nacht'});
+ else if(k==='rec'){const h=col2('hrv');
+  kvf=sl=>[[uv(avg(sl.map(d=>d.hrv)),' ms'),'Ø HRV'],[uv(avg(sl.map(d=>d.rhr)),' bpm'),'Ø Ruhepuls'],[uv(avg(sl.map(d=>d.bb)),' %'),'Ø Body Battery'],[uv(minA(sl.map(d=>d.rhr)),' bpm'),'Niedrigster Ruhepuls']];
+  c1=scrollChart($('#pc1',box),{...base,mode:'line',h:150,series:[{n:'HRV',c:'var(--c-heart)',v:h}],tfmt:v=>f0(v)+' ms',aria:'HRV Nacht'});
   const c2=scrollChart($('#pc2',box),{...base,onWindow:null,onPick:pick,mode:'line',h:110,series:[{n:'Ruhepuls',c:mix('--c-heart',70),v:col2('rhr')}],tfmt:v=>f0(v)+' bpm',aria:'Ruhepuls'});
   const sy=(x,y)=>x.scl.addEventListener('scroll',()=>{if(y.scl.scrollLeft!==x.scl.scrollLeft)y.scl.scrollLeft=x.scl.scrollLeft});sy(c1,c2);sy(c2,c1);
-  box.insertAdjacentHTML('beforeend','<div class="muted sm" style="margin-top:4px">Grauer Bereich: dein üblicher HRV-Bereich (Ø ± 1 Std.).</div>')}
- else if(k==='act'){kvf=sl=>[[f0(avg(sl.map(d=>d.steps))),'Ø Schritte'],[sl.filter(d=>d.steps>=T.goal).length+' von '+sl.length,'Tage mit Ziel'],[f0(sl.reduce((s,d)=>s+d.dist,0))+' km','Training gesamt'],[f0(avg(sl.map(d=>d.kcal)))+' kcal','Ø Verbrauch']];
+}
+ else if(k==='act'){kvf=sl=>[[f0(avg(sl.map(d=>d.steps))),'Ø Schritte'],[ok(T.goal)?sl.filter(d=>ok(d.steps)&&d.steps>=T.goal).length+' von '+nn(sl.map(d=>d.steps)).length:'–','Tage mit Ziel'],[uv(sumA(sl.map(d=>d.dist)),' km'),'Training gesamt'],[f0(avg(sl.map(d=>d.kcal)))+' kcal','Ø Verbrauch']];
   c1=scrollChart($('#pc1',box),{...base,mode:'stack',series:[{n:'Schritte',c:'var(--c-act)',v:col2('steps')}],tfmt:f0,goal:T.goal,aria:'Schritte pro Tag'})}
- else if(k==='str'){kvf=sl=>[[f0(avg(sl.map(d=>d.stress))),'Ø Level'],[f0(Math.max(...sl.map(d=>d.stress))),'Höchster Tageswert'],[sl.filter(d=>d.stress<26).length+' von '+sl.length,'Tage niedrig'],[f0(avg(sl.map(d=>d.sr)))+' min','Ø Ruhe pro Tag']];
+ else if(k==='str'){kvf=sl=>[[f0(avg(sl.map(d=>d.stress))),'Ø Level'],[f0(maxA(sl.map(d=>d.stress))),'Höchster Tageswert'],[f0(minA(sl.map(d=>d.stress))),'Niedrigster Tageswert'],[uv(avg(sl.map(d=>d.sr)),' min'),'Ø Ruhe pro Tag']];
   c1=scrollChart($('#pc1',box),{...base,mode:'stack',series:[{n:'Stress',c:'var(--c-str)',v:col2('stress')}],tfmt:f0,aria:'Stress pro Tag'})}
- else{kvf=sl=>[[f1(sl[sl.length-1].kg)+' kg','Gewicht zuletzt'],[f1(avg(sl.map(d=>d.kg)))+' kg','Ø Gewicht'],[f0(sl[sl.length-1].vo2),'VO2max zuletzt'],[(sl[sl.length-1].kg-sl[0].kg>=0?'+':'−')+f1(Math.abs(sl[sl.length-1].kg-sl[0].kg))+' kg','Veränderung']];
+ else{kvf=sl=>{const kg=nn(sl.map(d=>d.kg)),vo=nn(sl.map(d=>d.vo2)),dk=kg.length>1?kg[kg.length-1]-kg[0]:null;return[[uv(kg[kg.length-1],' kg',f1),'Gewicht zuletzt'],[uv(avg(kg),' kg',f1),'Ø Gewicht'],[f0(vo[vo.length-1]),'VO2max zuletzt'],[dk==null?'–':(dk>=0?'+':'−')+f1(Math.abs(dk))+' kg','Veränderung']]};
   c1=scrollChart($('#pc1',box),{...base,mode:'line',h:150,series:[{n:'Gewicht',c:'var(--c-body)',v:col2('kg')}],yfmt:v=>f1(v),tfmt:v=>f1(v)+' kg',aria:'Gewicht'});
   const c2=scrollChart($('#pc2',box),{...base,onWindow:null,mode:'line',h:110,series:[{n:'VO2max',c:mix('--c-body',70),v:col2('vo2')}],tfmt:f0,aria:'VO2max'});
   const sy=(x,y)=>x.scl.addEventListener('scroll',()=>{if(y.scl.scrollLeft!==x.scl.scrollLeft)y.scl.scrollLeft=x.scl.scrollLeft});sy(c1,c2);sy(c2,c1)}}
@@ -885,9 +881,9 @@ function dayBlock(w,k){const box=$('#dp-'+w);if(!box||k==='body')return;const di
  if(k==='sleep'){hypno(b,w,di);n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.';return}
  const kind={rec:'bb',act:'steps',str:'stress'}[k];
  const paint=R=>{if(!b.isConnected)return;const c=R?R[kind]:dayCurve(w,di,kind);if(!c||!c.some(x=>x!=null)){const dd=b.closest('.dday');if(dd)dd.remove();return}
-  if(k==='rec'){dayChart(b,c,{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent='Body Battery lädt im Schlaf und entlädt sich durch Stress und Training.'+(now?' Bis jetzt: '+d.bb+' %.':'')}
-  else if(k==='act'){const v=c.map(x=>x||0),sum=v.reduce((x,y)=>x+y,0),mx=Math.max(...v),hi=Math.max(500,Math.ceil(mx/500)*500),top=v.indexOf(mx);dayChart(b,c,{c:'var(--c-act)',lo:0,hi,bars:true,solid:true,fmt:x=>f0(x)+' Schritte',aria:'Schritte im Tagesverlauf'});n.textContent=`Schritte pro Stunde. Summe ${f0(sum)}${now?' bis jetzt':''}, Ziel ${f0(d.goal||10000)}.${mx>0?` Aktivste Stunde: ${top} bis ${top+1} Uhr mit ${f0(mx)} Schritten.`:''}`}
-  else{dayChart(b,c,{c:'var(--c-str)',lo:0,hi:100,bars:true,fmt:x=>f0(x)+' Stresslevel',aria:'Stress im Tagesverlauf'});n.textContent='Je dunkler der Balken, desto höher der Stress. Nachts ist er niedrig, Training zählt als Aktivitätsstress.'}};
+  if(k==='rec'){dayChart(b,c,{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent='Body Battery lädt im Schlaf und entlädt sich durch Stress und Training.'+(now&&ok(d.bb)?' Bis jetzt: '+d.bb+' %.':'')}
+  else if(k==='act'){const v=c.map(x=>x||0),sum=v.reduce((x,y)=>x+y,0),mx=Math.max(...v),hi=Math.max(500,Math.ceil(mx/500)*500),top=v.indexOf(mx);dayChart(b,c,{c:'var(--c-act)',lo:0,hi,bars:true,solid:true,fmt:x=>f0(x)+' Schritte',aria:'Schritte im Tagesverlauf'});n.textContent=`Schritte pro Stunde. Summe ${f0(sum)}${now?' bis jetzt':''}, Ziel ${f0(d.goal)}.${mx>0?` Aktivste Stunde: ${top} bis ${top+1} Uhr mit ${f0(mx)} Schritten.`:''}`}
+  else{dayChart(b,c,{c:'var(--c-str)',lo:0,hi:100,bars:true,fmt:x=>f0(x)+' Stresslevel',aria:'Stress im Tagesverlauf'});n.textContent='Garmin-Stresslevel pro Stunde. Training zählt als Aktivitätsstress.'}};
  if(DAYSRC){b.innerHTML='<div class="muted sm">Lade Tagesverlauf…</div>';DAYSRC(w,di).then(paint,e=>{console.log('DAYERR',e&&e.message);paint({})})}else paint(null)}
 /* ---------- Touren ---------- */
 const MON=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
@@ -1092,31 +1088,33 @@ function profile(a){const box=$('#pf');if(!box)return;const T=a.tr,W=box.clientW
 const MET={steps:{n:'Schritte',k:'steps',agg:'sum',u:''},dist:{n:'Distanz',k:'dist',agg:'sum',u:' km'},ascent:{n:'Aufstieg',k:'ascent',agg:'sum',u:' m'},dur:{n:'Dauer',k:'dur',agg:'sum',u:' h'},load:{n:'Trainingslast',k:'load',agg:'sum',u:''},rhr:{n:'Ruhepuls',k:'rhr',agg:'mean',u:' bpm'},hrv:{n:'HRV',k:'hrv',agg:'mean',u:' ms'},sleep:{n:'Schlafwert',k:'sleep',agg:'mean',u:''}};
 const VIS={week:7,month:30,quarter:90,year:26};
 function buckets(w,mk){const d=DAILY[w],M=MET[mk],idx=[];if(S.span==='year'){for(let s=0;s<=ND;s+=7)idx.push([s,Math.min(ND,s+6)])}else for(let i=0;i<=ND;i++)idx.push([i,i]);
- return idx.map(([a,b])=>{const sl=d.slice(a,b+1).map(x=>x[M.k]),sum=sl.reduce((x,y)=>x+y,0);return{a,b,v:M.agg==='sum'?sum:sum/sl.length}})}
-function acwr(w){const as=ACTS.filter(a=>a.who===w),L=(f,t)=>as.filter(a=>{const d=dayOf(a.date);return d>ND-t&&d<=ND-f}).reduce((s,a)=>s+a.st.load,0);const ac=L(0,7),ch=L(0,28)/4;return{ac,ch,r:ch?ac/ch:0}}
-const dl=(a,b)=>b?Math.round((a-b)/b*100):0;
+ return idx.map(([a,b])=>{const sl=d.slice(a,b+1).map(x=>x[M.k]);return{a,b,v:M.agg==='sum'?sumA(sl):avgA(sl)}})}
+/* nur mit 28 Tagen lückenloser Trainingslast, sonst null (Karte ausgeblendet) */
+function acwr(w){const L=DAILY[w].slice(Math.max(0,ND-27),ND+1).map(d=>d.load);if(L.length<28||!L.every(ok))return null;const ac=sumA(L.slice(-7)),ch=sumA(L)/4;return ch?{ac,ch,r:ac/ch}:null}
+const dl=(a,b)=>ok(a)&&ok(b)&&b?Math.round((a-b)/b*100):null;
 function heat(w,W){const weeks=Math.max(8,Math.min(W<520?20:26,Math.floor((W-34)/13))),end=ND,endWd=(dAt(end).getDay()+6)%7,cell=Math.max(10,Math.min(28,Math.floor((W-34)/weeks)-3)),gap=3,H=7*(cell+gap)+18;
  let rects='',months='',lastM=-1;let c0=0;while(c0<weeks-1&&end-((weeks-1-c0)*7+(endWd-6))<0)c0++;
- for(let c=c0;c<weeks;c++){for(let r=0;r<7;r++){const idx=end-((weeks-1-c)*7+(endWd-r));if(idx>end||idx<0)continue;const dd=DAILY[w][idx],ld=dd.load,lv=ld<=0?0:ld<25?1:ld<55?2:ld<100?3:4,pc=[0,26,48,74,100][lv],dt=dAt(idx),n=ACTS.filter(a=>a.who===w&&dayOf(a.date)===idx).length;
-  rects+=`<rect x="${34+(c-c0)*(cell+gap)}" y="${18+r*(cell+gap)}" width="${cell}" height="${cell}" rx="3" fill="${lv?`color-mix(in srgb,var(${PERS[w].c}) ${pc}%,var(--emp))`:'var(--emp)'}" data-i="${idx}" data-n="${n}" ${idx===S.day&&false?'':''}><title>${dfmt(dt,{weekday:'short',day:'numeric',month:'numeric'})}: ${n?n+' Aktivität'+(n>1?'en':'')+', Last '+ld:'keine Aktivität'}</title></rect>`;
+ for(let c=c0;c<weeks;c++){for(let r=0;r<7;r++){const idx=end-((weeks-1-c)*7+(endWd-r));if(idx>end||idx<0)continue;const dd=DAILY[w][idx],ld=dd.load,gap=!ok(ld),lv=gap||ld<=0?0:ld<25?1:ld<55?2:ld<100?3:4,pc=[0,26,48,74,100][lv],dt=dAt(idx),n=ACTS.filter(a=>a.who===w&&dayOf(a.date)===idx).length;
+  rects+=`<rect x="${34+(c-c0)*(cell+gap)}" y="${18+r*(cell+gap)}" width="${cell}" height="${cell}" rx="3" fill="${lv?`color-mix(in srgb,var(${PERS[w].c}) ${pc}%,var(--emp))`:'var(--emp)'}" data-i="${idx}" data-n="${gap?0:n}" ${idx===S.day&&false?'':''}><title>${dfmt(dt,{weekday:'short',day:'numeric',month:'numeric'})}: ${gap?'keine Daten':n?n+' Aktivität'+(n>1?'en':'')+', Last '+f0(ld):'keine Aktivität'}</title></rect>`;
   if(r===0&&dt.getMonth()!==lastM){lastM=dt.getMonth();months+=`<text x="${34+(c-c0)*(cell+gap)}" y="11" font-size="11" fill="var(--text2)">${MON[lastM].slice(0,3)}</text>`}}}
  const wd=['Mo','Mi','Fr'].map((t,i)=>`<text x="0" y="${18+i*2*(cell+gap)+cell-2}" font-size="11" fill="var(--text2)">${t}</text>`).join('');
  return`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Aktivitätskalender ${PERS[w].n}">${months}${wd}${rects}</svg>`}
 const iso=i=>{const d=dAt(i);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const RQ=[['w0','Diese Woche'],['w1','Letzte Woche'],['m0','Dieser Monat'],['m1','Letzter Monat'],['d30','Letzte 30 Tage'],['y0','Dieses Jahr']];
 function rIdx(k){const wd=(dAt(ND).getDay()+6)%7,mon=ND-wd,m0=Math.max(0,dayOf(new Date(TODAY.getFullYear(),TODAY.getMonth(),1))),pm=Math.max(0,dayOf(new Date(TODAY.getFullYear(),TODAY.getMonth()-1,1)));return{w0:[mon,ND],w1:[mon-7,mon-1],m0:[m0,ND],m1:[pm,m0-1],d30:[ND-29,ND],y0:[0,ND]}[k]}
-function rangeSum(w,a,b){const days=DAILY[w].slice(a,b+1),as=ACTS.filter(x=>x.who===w&&dayOf(x.date)>=a&&dayOf(x.date)<=b),av=f=>days.reduce((s,d)=>s+d[f],0)/(days.length||1),sm=f=>as.reduce((s,x)=>s+f(x),0);
- return{n:as.length,dist:sm(x=>x.st.dist/1000),asc:sm(x=>x.st.gain),dur:sm(x=>x.st.dur/3600),load:sm(x=>x.st.load),steps:av('steps'),sleep:av('slp'),rhr:av('rhr'),hrv:av('hrv'),as}}
+function rangeSum(w,a,b){const days=DAILY[w].slice(a,b+1),cov=days.some(d=>ok(d.dist)),as=ACTS.filter(x=>x.who===w&&!x.live&&dayOf(x.date)>=a&&dayOf(x.date)<=b&&ok((DAILY[w][dayOf(x.date)]||{}).dist)),av=f=>avgA(days.map(d=>d[f])),sm=f=>cov?as.reduce((s,x)=>s+(f(x)||0),0):null;
+ /* Aktivitätssummen nur über Tage, die die Quelle abdeckt; sonst null */
+ return{n:cov?as.length:null,dist:sm(x=>x.st.dist/1000),asc:sm(x=>x.st.gain),dur:sm(x=>x.st.dur/3600),load:sm(x=>x.st.load),steps:av('steps'),sleep:av('slp'),rhr:av('rhr'),hrv:av('hrv'),as}}
 function rangeCard(){const box=$('#rcard');if(!box)return;const r=S.rng||(S.rng={key:'w0',a:rIdx('w0')[0],b:ND}),ps=persons();
  const KS=[null,'dist','ascent','dur','load','steps','slp','rhr','hrv'],KN={dist:'Distanz in km',ascent:'Aufstieg in m',dur:'Zeit in h',load:'Trainingslast',steps:'Schritte',slp:'Schlafdauer',rhr:'Ruhepuls in bpm',hrv:'HRV in ms'};
  const show=()=>{const L=r.b-r.a+1,pa=r.a-L,okp=pa>=0;
-  const dtx=(c,p)=>okp&&p?(c>=p?'+':'')+Math.round((c-p)/p*100)+' % gegen davor':'';
+  const dtx=(c,p)=>{const x=pct(okp,c,p);return x?x+' gegen davor':''};
   box.innerHTML=`<h2 class="h2">Zeitraum auswerten</h2><div class="chips" id="rq">${RQ.map(([k,n])=>`<button class="chip" data-rq="${k}" aria-pressed="${r.key===k}">${n}</button>`).join('')}</div>
   <div class="rangein"><label>Von <input type="date" id="rf" min="${iso(0)}" max="${iso(ND)}" value="${iso(r.a)}"></label><label>Bis <input type="date" id="rt" min="${iso(0)}" max="${iso(ND)}" value="${iso(r.b)}"></label><span class="muted sm">${L} Tage${okp?', verglichen mit den '+L+' Tagen davor':''}</span></div>
-  ${ps.length>1?pairTable(r.a,r.b,pa,okp):''}<div class="cols" style="margin-top:14px" ${ps.length>1?'data-pm="1"':''}>${ps.map(w=>{const c=rangeSum(w,r.a,r.b),p=okp?rangeSum(w,pa,r.a-1):null,P=k=>p?p[k]:0,best=c.as.filter(x=>x.gps).sort((x,y)=>y.st.dist-x.st.dist)[0],mx={};for(const x of c.as)mx[x.sport]=(mx[x.sport]||0)+x.st.dur/3600;const e=Object.entries(mx).sort((x,y)=>y[1]-x[1]),mh=Math.max(...e.map(x=>x[1]),1);
-   const T=[[c.n,'Aktivitäten',okp?(c.n-P('n')>0?'+':'')+(c.n-P('n'))+' gegen davor':''],[f0(c.dist)+' km','Distanz',dtx(c.dist,P('dist'))],[f0(c.asc)+' m','Aufstieg',dtx(c.asc,P('asc'))],[f1(c.dur)+' h','Zeit',dtx(c.dur,P('dur'))],[f0(c.load),'Trainingslast',dtx(c.load,P('load'))],[f0(c.steps),'Ø Schritte',dtx(c.steps,P('steps'))],[hmm(c.sleep),'Ø Schlaf',dtx(c.sleep,P('sleep'))],[f0(c.rhr)+' bpm','Ø Ruhepuls',dtx(c.rhr,P('rhr'))],[f0(c.hrv)+' ms','Ø HRV',dtx(c.hrv,P('hrv'))]];
+  ${ps.length>1?pairTable(r.a,r.b,pa,okp):''}<div class="cols" style="margin-top:14px" ${ps.length>1?'data-pm="1"':''}>${ps.map(w=>{const c=rangeSum(w,r.a,r.b),p=okp?rangeSum(w,pa,r.a-1):null,P=k=>p?p[k]:null,best=c.as.filter(x=>x.gps).sort((x,y)=>y.st.dist-x.st.dist)[0],mx={};for(const x of c.as)mx[x.sport]=(mx[x.sport]||0)+x.st.dur/3600;const e=Object.entries(mx).sort((x,y)=>y[1]-x[1]),mh=Math.max(...e.map(x=>x[1]),1);
+   const T=[[f0(c.n),'Aktivitäten',okp&&ok(c.n)&&ok(P('n'))?(c.n-P('n')>0?'+':'')+(c.n-P('n'))+' gegen davor':''],[uv(c.dist,' km'),'Distanz',dtx(c.dist,P('dist'))],[uv(c.asc,' m'),'Aufstieg',dtx(c.asc,P('asc'))],[uv(c.dur,' h',f1),'Zeit',dtx(c.dur,P('dur'))],[f0(c.load),'Trainingslast',dtx(c.load,P('load'))],[f0(c.steps),'Ø Schritte',dtx(c.steps,P('steps'))],[hmm(c.sleep),'Ø Schlaf',dtx(c.sleep,P('sleep'))],[uv(c.rhr,' bpm'),'Ø Ruhepuls',dtx(c.rhr,P('rhr'))],[uv(c.hrv,' ms'),'Ø HRV',dtx(c.hrv,P('hrv'))]];
    return`<div class="card" style="box-shadow:none"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div><div class="kv">${T.map(([a,b,d],qi)=>KS[qi]?`<button class="kvb" data-w="${w}" data-kpi="${KS[qi]}" aria-pressed="${S.kpi===w+'|'+KS[qi]}"><b>${a}</b><span>${b}</span><span class="delta">${d}</span></button>`:`<div><b>${a}</b><span>${b}</span><span class="delta">${d}</span></div>`).join('')}</div>
-   ${e.length?`<div style="margin-top:12px">${e.map(([s,h])=>`<button class="srow" data-rsp="${w}|${s}" aria-expanded="${S.rsp===w+'|'+s}"><span>${ic(s,18)}${SP[s].n}</span><div class="bar"><i style="width:${h/mh*100}%;background:var(${PERS[w].c})"></i></div><b>${f1(h)} h</b></button>`).join('')}</div>`:'<div class="muted" style="margin-top:10px">Keine Aktivitäten im Zeitraum.</div>'}
+   ${!ok(c.n)?'<div class="muted" style="margin-top:10px">Für diesen Zeitraum liegen keine Aktivitätsdaten vor.</div>':e.length?`<div style="margin-top:12px">${e.map(([s,h])=>`<button class="srow" data-rsp="${w}|${s}" aria-expanded="${S.rsp===w+'|'+s}"><span>${ic(s,18)}${SP[s].n}</span><div class="bar"><i style="width:${h/mh*100}%;background:var(${PERS[w].c})"></i></div><b>${f1(h)} h</b></button>`).join('')}</div>`:'<div class="muted" style="margin-top:10px">Keine Aktivitäten im Zeitraum.</div>'}
    ${best?`<button class="arow" data-open="${best.id}" style="margin-top:6px"><span class="mr">${routeSvg(best)}</span><span class="t"><b>${esc(ttl(best))}</b><span class="muted sm">Längste Tour · ${dfmt(best.date,{weekday:'short',day:'numeric',month:'numeric'})}</span></span><span class="r">${f1(best.st.dist/1000)} km<span class="muted sm">${f0(best.st.gain)} m ↑</span></span>${ic('next',16)}</button>`:''}</div>`}).join('')}</div>
   <button class="btn p" id="ropen" style="margin-top:12px">Touren dieses Zeitraums auf der Karte</button>`;
   $('#rq').onclick=e=>{const b=e.target.closest('[data-rq]');if(!b)return;const x=rIdx(b.dataset.rq);r.key=b.dataset.rq;r.a=x[0];r.b=x[1];show()};
@@ -1135,10 +1133,10 @@ function rangeCard(){const box=$('#rcard');if(!box)return;const r=S.rng||(S.rng=
   if(S.kpi){const[kw,kk]=S.kpi.split('|'),cb=$('#kc-'+kw);if(cb&&ps.includes(kw)){const vals=DAILY[kw].slice(r.a,r.b+1).map(d=>d[kk]),sum=['dist','ascent','dur','load','steps'].includes(kk);scrollChart(cb,{mode:sum?'stack':'line',n:vals.length,vis:Math.min(vals.length,45),h:170,series:[{n:KN[kk],c:`var(${PERS[kw].c})`,v:vals}],labels:i=>dfmt(dAt((r.a+i)),{weekday:'short',day:'numeric',month:'numeric'}),short:i=>dfmt(dAt((r.a+i)),{day:'numeric',month:'numeric'}),tfmt:kk==='slp'?hmm:f1,yfmt:kk==='slp'?(x=>f1(x/60)+' h'):f0,sel:-1,aria:KN[kk]})}}};
  show()}
 function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
- const wk=ps.map(w=>{const a=weekSum(w,0),b=weekSum(w,7);return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">letzte 7 Tage gegen die 7 davor</span></div><div class="kv">${[['Distanz',f0(a.dist)+' km',dl(a.dist,b.dist)],['Aufstieg',f0(a.asc)+' m',dl(a.asc,b.asc)],['Dauer',f1(a.dur)+' h',dl(a.dur,b.dur)],['Aktivitäten',a.n,a.n-b.n]].map(([n,val,d],i)=>`<div><b>${val}</b><span>${n}</span><span class="delta">${d>0?'+':''}${d}${i===3?'':' %'} zur Vorwoche</span></div>`).join('')}</div></div>`}).join('');
- const sports=ps.map(w=>{const lo=ND-29,m={};for(const a of ACTS)if(a.who===w&&dayOf(a.date)>=lo)m[a.sport]=(m[a.sport]||0)+a.st.dur/3600;const e=Object.entries(m).sort((x,y)=>y[1]-x[1]),mx=Math.max(...e.map(x=>x[1]),1);
+ const wk=ps.map(w=>{const a=weekSum(w,0),b=weekSum(w,7);return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">letzte 7 Tage gegen die 7 davor</span></div><div class="kv">${[['Distanz',uv(a.dist,' km'),dl(a.dist,b.dist)],['Aufstieg',uv(a.asc,' m'),dl(a.asc,b.asc)],['Dauer',uv(a.dur,' h',f1),dl(a.dur,b.dur)],['Aktivitäten',f0(a.n),ok(a.n)&&ok(b.n)?a.n-b.n:null]].map(([n,val,d],i)=>`<div><b>${val}</b><span>${n}</span><span class="delta">${d==null?'':(d>0?'+':'')+d+(i===3?'':' %')+' zur Vorwoche'}</span></div>`).join('')}</div></div>`}).join('');
+ const sports=ps.map(w=>{const lo=ND-29,m={};for(const a of ACTS)if(a.who===w&&!a.live&&dayOf(a.date)>=lo&&ok((DAILY[w][dayOf(a.date)]||{}).dist))m[a.sport]=(m[a.sport]||0)+a.st.dur/3600;const e=Object.entries(m).sort((x,y)=>y[1]-x[1]),mx=Math.max(...e.map(x=>x[1]),1);
   return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">Sportarten, 30 Tage</span></div>${e.map(([s,h])=>`<button class="srow" data-csp="${w}|${s}" aria-expanded="${S.cspo===w+'|'+s}"><span>${ic(s,18)}${SP[s].n}</span><div class="bar"><i style="width:${h/mx*100}%;background:var(${PERS[w].c})"></i></div><b>${f1(h)} h</b></button>`).join('')||'<div class="muted">Keine Aktivitäten.</div>'}</div>`}).join('');
- const load=ps.map(w=>{const A=acwr(w),pos=Math.max(0,Math.min(100,A.r/2*100)),z=A.r<.8?'niedrig':A.r<=1.3?'im Zielbereich':'hoch';return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">Belastungsbalance</span></div><div class="acwr"><i style="left:calc(${pos}% - 2px)"></i></div><div class="lgx"><span>0</span><span>0,8</span><span>1,3</span><span>2</span></div><div style="margin-top:8px"><b>${A.r.toFixed(2).replace('.',',')}</b> <span class="muted">${z}</span></div><div class="muted sm">Trainingslast der letzten 7 Tage (${f0(A.ac)}) im Verhältnis zum 4-Wochen-Schnitt (${f0(A.ch)}).</div></div>`}).join('');
+ const load=ps.map(w=>{const A=acwr(w);if(!A)return'';const pos=Math.max(0,Math.min(100,A.r/2*100));return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">Belastungsbalance</span></div><div class="acwr"><i style="left:calc(${pos}% - 2px)"></i></div><div class="lgx"><span>0</span><span>1</span><span>2</span></div><div style="margin-top:8px"><b>${A.r.toFixed(2).replace('.',',')}</b></div><div class="muted sm">Trainingslast der letzten 7 Tage (${f0(A.ac)}) im Verhältnis zum 4-Wochen-Schnitt (${f0(A.ch)}).</div></div>`}).join('');
  v.innerHTML=`<div class="stack">
  <section class="card" id="rcard"></section>
  <section class="card"><h2 class="h2">Aktivitätskalender</h2><div class="muted sm" style="margin:-6px 0 10px">Je dunkler, desto höher die Trainingslast. Tippe auf einen Tag mit Aktivität, dann öffnet sich die Tour.</div>${ps.map(w=>`<div class="heatwrap" data-w="${w}">${ps.length>1?`<div class="sm" style="font-weight:600;margin:6px 0 2px">${PERS[w].n}</div>`:''}<div class="hm"></div></div>`).join('')}</section>
@@ -1160,10 +1158,11 @@ const draw=()=>{if(!$('#tc'))return;const B=ps.map(w=>buckets(w,S.metric)),wkS=S
   scrollChart($('#tc'),{mode:M.agg==='sum'?'group':'line',h:250,series:ps.map((w,pi)=>({n:PERS[w].n,c:`var(${PERS[w].c})`,v:B[pi].map(x=>x.v)})),n:B[0].length,vis:VIS[S.span],labels:lab,short:i=>wkS?'KW'+(Math.floor(B[0][i].a/7)+1):S.span==='week'?dfmt(dt(i),{weekday:'short',day:'numeric'}).replace('.',''):dfmt(dt(i),{day:'numeric',month:'numeric'}),tfmt:v=>f0(v)+M.u,sel:-1,pwin:S.twin,aria:M.n+' Verlauf',
    onPick:canopen?i=>{S.range=[dt(i),dAt((B[0][i].b+1))];S.preset='custom';S.sel=null;S.tab='tour';render()}:null,
    onWindow:(a,b)=>{S.twin=a;S.thist={from:dt(a),to:new Date(START.getTime()+B[0][b].b*D+D)};const L=b-a+1;$('#trange').textContent=dfmt(dt(a),{day:'numeric',month:'long'})+' bis '+dfmt(dAt(B[0][b].b),{day:'numeric',month:'long'})+(canopen?' · Balken antippen öffnet die Touren':'');
-    $('#tk').innerHTML=ps.map((w,pi)=>{const vals=B[pi].slice(a,b+1).map(x=>x.v),prev=B[pi].slice(Math.max(0,a-L),a).map(x=>x.v),sm=x=>x.reduce((p,q)=>p+q,0),cur=M.agg==='sum'?sm(vals):sm(vals)/vals.length,pv=prev.length?(M.agg==='sum'?sm(prev):sm(prev)/prev.length):0,d=pv?Math.round((cur-pv)/pv*100):0;
-     return`<div><b><span class="dot" style="background:var(${PERS[w].c});margin-right:6px"></span>${PERS[w].n}</b><span>${M.agg==='sum'?'Summe':'Durchschnitt'}</span></div><div><b>${f0(cur)}${M.u}</b><span>im Zeitfenster</span></div><div><b>${f0(Math.max(...vals))}${M.u}</b><span>Maximum</span></div><div><b>${prev.length?(d>=0?'+':'')+d+' %':'–'}</b><span>gegen davor</span></div>`}).join('')}})};
+    $('#tk').innerHTML=ps.map((w,pi)=>{const vals=B[pi].slice(a,b+1).map(x=>x.v),prev=B[pi].slice(Math.max(0,a-L),a).map(x=>x.v),cur=M.agg==='sum'?sumA(vals):avgA(vals),pv=prev.length===L?(M.agg==='sum'?sumA(prev):avgA(prev)):null,d=dl(cur,pv);
+     return`<div><b><span class="dot" style="background:var(${PERS[w].c});margin-right:6px"></span>${PERS[w].n}</b><span>${M.agg==='sum'?'Summe':'Durchschnitt'}</span></div><div><b>${uv(cur,M.u)}</b><span>im Zeitfenster</span></div><div><b>${uv(maxA(vals),M.u)}</b><span>Maximum</span></div><div><b>${d==null?'–':(d>=0?'+':'')+d+' %'}</b><span>gegen davor</span></div>`}).join('')}})};
  draw();const ro=new ResizeObserver(()=>{draw();doHeat()});ro.observe($('#tc'))}
 /* ---------- Live-Modus: echte Daten aus Home Assistant ---------- */
+let ACOV=0;
 const FD=self.FitnessData,UNAME={p1:'p1',p2:'p2'},PMATCH={p2:null};
 function applyCfg(cfg){if(cfg.names){if(cfg.names.p1)PERS.p1.n=cfg.names.p1;if(cfg.names.p2)PERS.p2.n=cfg.names.p2}
  if(cfg.entities)Object.assign(UNAME,cfg.entities);PMATCH.p2=cfg.person_match&&cfg.person_match.p2?new RegExp(cfg.person_match.p2,'i'):null}
@@ -1177,14 +1176,21 @@ function mapLiveAct(w,a){
  o.st=Object.assign({},a.st,{avgHR:a.st.avgHR||0,maxHR:a.st.maxHR||0,maxV:a.st.maxV||0});
  return o}
 const DKEYS=['steps','kcal','goal','rhr','hrv','sleep','slp','deep','rem','light','awake','need','bb','stress','sr','sl','sm','sh','vo2','kg','ready'];
-function buildDaily(rows,acts){
+/* Keine Lücken füllen: fehlt ein Wert, bleibt er null (auch Schritte und kcal) */
+const isNum=v=>v!=null&&typeof v!=='boolean'&&isFinite(v);
+function buildDaily(rows,acts,cov){
  const n=rows.length,days=rows.map(r=>({}));
- for(const k of DKEYS){let last=null;rows.forEach((r,i)=>{let v=r[k];if(v==null||!isFinite(v))v=(k==='steps'||k==='kcal')?0:last;else last=v;days[i][k]=(v!=null&&(k==='kg'||k==='vo2'))?Math.round(v*10)/10:(v!=null?Math.round(v):v)});
-  let first=null;for(let i=n-1;i>=0;i--)if(days[i][k]!=null)first=days[i][k];
-  for(let i=0;i<n;i++)if(days[i][k]==null)days[i][k]=first==null?0:first}
- days.forEach((d,i)=>{d.dist=0;d.ascent=0;d.load=0;d.dur=0;d.missing=!!rows[i].missing;if(d.light==null||!d.light)d.light=Math.max(0,d.slp-d.deep-d.rem-d.awake)});
- for(const a of acts){const i=dayOf(a.date);if(i<0||i>=n)continue;const d=days[i];d.dist+=a.st.dist/1000;d.ascent+=a.st.gain;d.load+=a.st.load;d.dur+=a.st.dur/3600}
+ for(const k of DKEYS)rows.forEach((r,i)=>{const v=r[k];days[i][k]=!isNum(v)||r.missing?null:(k==='kg'||k==='vo2')?Math.round(v*10)/10:Math.round(v)});
+ /* Aktivitätssummen nur im abgedeckten Fenster (sonst null), dort 0 an Tagen ohne Aktivität */
+ days.forEach((d,i)=>{const inW=i>=cov&&!rows[i].missing;d.dist=inW?0:null;d.ascent=inW?0:null;d.load=inW?0:null;d.dur=inW?0:null;d.missing=!!rows[i].missing});
+ for(const a of acts){const i=dayOf(a.date);if(i<0||i>=n)continue;const d=days[i];if(d.dist==null)continue;d.dist+=(a.st.dist||0)/1000;d.ascent+=a.st.gain||0;d.load+=a.st.load||0;d.dur+=(a.st.dur||0)/3600}
  return days}
+/* Garmins eigene Trainingsbereitschaft: Stufe und Faktoren aus den Sensor-Attributen */
+const RFACS=[['sleepScore','Schlaf (letzte Nacht)'],['recoveryTime','Erholungszeit','recoveryTime',' h'],['acwr','Belastung (akut/chronisch)','acuteLoad',' akut'],['stressHistory','Stressverlauf'],['hrv','HRV','hrvWeeklyAverage',' ms Wochen-Ø'],['sleepHistory','Schlafverlauf']];
+function readReadiness(st,w,T){const e=st['sensor.garmin_'+UNAME[w]+'_trainingsbereitschaft'],at=(e&&e.attributes)||{};
+ T.rlevel=at.level!=null&&at.level!==''?String(at.level):null;
+ T.rfac=RFACS.map(([k,n,xk,xu])=>{const fb=at[k+'FactorFeedback'],pc=parseFloat(at[k+'FactorPercent']),xv=xk?parseFloat(at[xk]):NaN;
+  if((fb==null||fb==='')&&!isNum(pc))return null;return{n,pct:isNum(pc)?pc:null,fb:fb==null||fb===''?null:String(fb),x:isNum(xv)?Math.round(xv)+xu:null}}).filter(Boolean)}
 function detectJoint(list){
  for(const k of list.filter(a=>a.who==='p2'))for(const j of list.filter(a=>a.who==='p1')){
   if(k.sport===j.sport&&Math.abs(k.date-j.date)<30*6e4&&Math.abs(k.st.dist-j.st.dist)<=Math.max(300,j.st.dist*.15)){k.joint=j.id;break}}}
@@ -1201,10 +1207,11 @@ async function loadLive(hass,cfg,who){
  ACTS=[];DAILY={};TODAYV={};
  for(const w of who)for(const a of raw[w].acts)ACTS.push(mapLiveAct(w,a));
  ACTS.sort((a,b)=>b.date-a.date);detectJoint(ACTS);byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
- for(const w of who){const d=DAILY[w]=buildDaily(raw[w].rows,ACTS.filter(a=>a.who===w)),L=d[d.length-1],last7=d.slice(-7),av=k=>last7.reduce((s,x)=>s+x[k],0)/(last7.length||1);
+ ACOV=Math.max(0,Math.min(ND,dayOf(new Date(Date.now()-35*864e5))));
+ for(const w of who){const d=DAILY[w]=buildDaily(raw[w].rows,ACTS.filter(a=>a.who===w),ACOV),L=d[d.length-1],last7=d.slice(-7),av=k=>{const v=last7.map(x=>x[k]).filter(isNum);return v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length):null};
   const st=hass.states&&hass.states['sensor.garmin_'+UNAME[w]+'_trainingsstatus'],stx=st&&st.state&&!['unknown','unavailable'].includes(st.state)?st.state:'';
   const hw=hass.states&&hass.states['sensor.garmin_'+UNAME[w]+'_hrv_wochendurchschnitt'],hwv=hw&&parseFloat(hw.state);
-  TODAYV[w]={steps:L.steps,goal:L.goal||10000,bb:L.bb,rhr:L.rhr,rhr7:Math.round(av('rhr')),hrv:L.hrv,hrvW:isFinite(hwv)?hwv:Math.round(av('hrv')),sleep:L.sleep,stress:L.stress,ready:L.ready,status:stx.replace(/_/g,' ').toLowerCase().replace(/^./,c=>c.toUpperCase())||'–',vo2:L.vo2,kcal:L.kcal,slp:L.slp,deep:L.deep,light:L.light,rem:L.rem,awake:L.awake,need:L.need||480,sr:L.sr,sl:L.sl,sm:L.sm,sh:L.sh}}
+  TODAYV[w]={steps:L.steps,goal:L.goal,bb:L.bb,rhr:L.rhr,rhr7:av('rhr'),hrv:L.hrv,hrvW:isNum(hwv)?hwv:av('hrv'),rlevel:null,rfac:[],sleep:L.sleep,stress:L.stress,ready:L.ready,status:stx.replace(/_/g,' ').toLowerCase().replace(/^./,c=>c.toUpperCase())||'–',vo2:L.vo2,kcal:L.kcal,slp:L.slp,deep:L.deep,light:L.light,rem:L.rem,awake:L.awake,need:L.need,sr:L.sr,sl:L.sl,sm:L.sm,sh:L.sh}}
  for(const k of Object.keys(ACW))delete ACW[k];
  await refreshLive(hass,who);
  return{off,todayAbs,archive:!!cfg.archive}}
@@ -1254,6 +1261,7 @@ const NOWK={steps:'schritte',bb:'body_battery',stress:'durchschnittliches_stress
 const NOWAT={};
 function applyNow(hass,who){const st=hass&&hass.states||{};for(const w of who){const T=TODAYV[w],d=DAILY[w]&&DAILY[w][ND];if(!T)continue;let lu=0;
  for(const [k,n] of Object.entries(NOWK)){const e=st['sensor.garmin_'+UNAME[w]+'_'+n];if(!e)continue;const v=parseFloat(e.state);if(!isFinite(v))continue;T[k]=Math.round(v);if(d)d[k]=Math.round(v);const t=Date.parse(e.last_updated||e.last_changed||'');if(isFinite(t)&&t>lu)lu=t}
+ readReadiness(st,w,T);
  if(lu)NOWAT[w]=lu}}
 const standHM=w=>NOWAT[w]?new Date(NOWAT[w]).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):nowHM();
 async function refreshLive(hass,who){
