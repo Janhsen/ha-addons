@@ -127,6 +127,7 @@ const CSS=`:host{display:block;color:var(--text);font:15px/1.4 -apple-system,Bli
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible{outline:2px solid var(--p1);outline-offset:2px}
 .top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.tbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
 h1{font-size:28px;line-height:1.1;margin:0;letter-spacing:-.02em;font-weight:700}
 .seg{display:inline-flex;background:var(--surface2);border-radius:999px;padding:3px;gap:2px;max-width:100%;overflow-x:auto}
 .seg button{border:0;background:none;padding:7px 14px;border-radius:999px;color:var(--text2);min-height:36px;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
@@ -1172,7 +1173,7 @@ function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
  <section class="card" id="rcard"></section>
  <section class="card"><h2 class="h2">Aktivitätskalender</h2><div class="muted sm" style="margin:-6px 0 10px">Je dunkler, desto höher die Trainingslast. Tippe auf einen Tag mit Aktivität, dann öffnet sich die Tour.</div>${ps.map(w=>`<div class="heatwrap" data-w="${w}">${ps.length>1?`<div class="sm" style="font-weight:600;margin:6px 0 2px">${PERS[w].n}</div>`:''}<div class="hm"></div></div>`).join('')}</section>
  <section class="card"><div class="chips" id="mets" style="margin-bottom:10px">${Object.entries(MET).map(([k,m])=>`<button class="chip" data-k="${k}" aria-pressed="${S.metric===k}">${m.n}</button>`).join('')}</div>
- <div class="top" style="margin-bottom:10px"><div class="seg" id="spans">${[['week','Woche'],['month','Monat'],['quarter','3 Monate'],['year','Jahr']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.span===k}">${n}</button>`).join('')}</div><span class="muted sm" id="trange"></span></div>
+ <div class="tbar" style="margin-bottom:10px"><div class="seg" id="spans">${[['week','Woche'],['month','Monat'],['quarter','3 Monate'],['year','Jahr']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.span===k}">${n}</button>`).join('')}</div><span class="muted sm" id="trange"></span></div>
  <div class="chartbox" id="tc"></div><div class="kv" id="tk" style="margin-top:14px"></div></section>
  <div class="cols">${sports}</div><div class="cols">${load}</div>
  <section class="card" id="acard"></section>
