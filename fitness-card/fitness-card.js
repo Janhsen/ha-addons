@@ -142,9 +142,7 @@ h1{font-size:28px;line-height:1.1;margin:0;letter-spacing:-.02em;font-weight:700
 .chip{border:1px solid var(--sep);background:var(--surface);border-radius:999px;padding:5px 11px;min-height:32px;display:inline-flex;gap:6px;align-items:center;font-size:13px}
 .chip[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.dmorebtn{display:none;width:100%;margin:-6px 0 10px}
 @media (min-width:871px){#hamb{display:none!important}}
-@media (max-width:640px){.dmorebtn{display:flex}#dmore{display:none}.dmore-open #dmore{display:block}#dmore.open{display:block}}
 .dcard:focus-visible,.chip:focus-visible,.ib:focus-visible,.row:focus-visible,button:focus-visible{outline:2px solid var(--accent,#1a73e8);outline-offset:2px}
 .ib{width:36px;height:36px;border-radius:50%;border:1px solid var(--sep);background:var(--surface);display:inline-grid;place-items:center;padding:0}
 .ib svg{width:18px;height:18px}
@@ -168,7 +166,8 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px}
 .kv div{display:flex;flex-direction:column}
 .kv b{font-size:17px;font-weight:600}
-.kvt{grid-template-columns:repeat(auto-fill,minmax(136px,1fr))}.kvt b{white-space:nowrap}
+.kvt{grid-template-columns:repeat(auto-fill,minmax(136px,1fr))}.kvt b{white-space:nowrap}.kvt .kvl b{white-space:normal}
+@media (max-width:640px){.kvt{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 8px}.kvt b{font-size:15px}.kvt span{font-size:11px}}
 .kv span{font-size:12px;color:var(--text2)}
 .btn{border:1px solid var(--sep);background:var(--surface);border-radius:999px;padding:7px 14px;min-height:36px;display:inline-flex;gap:6px;align-items:center}
 .btn.p{background:var(--text);color:var(--bg);border-color:var(--text)}
@@ -1054,10 +1053,9 @@ function detail(){const box=$('#det');if(!box)return;const a=byId[S.sel];if(!a){
  const avgPace=sec=>pc(sec);
  const avgTxt=a.gps?(!has(s.avgV)?'–':pace?avgPace(3600/s.avgV)+' /km':f1(s.avgV)+' km/h'):'';
  box.innerHTML=`<div class="card"><div class="dh"><span class="pill" style="--pc:var(${PERS[a.who].c})">${PERS[a.who].n}</span><h3>${a.live?'<span class="ldot" title="Live"></span>':''}${esc(ttl(a))}</h3><span class="muted sm">${sp.n} · ${dfmt(a.date,{weekday:'long',day:'numeric',month:'long'})}, ${a.date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>${a.sname?`<div class="muted sm" style="margin:-6px 0 12px"><span class="chip" style="min-height:24px;padding:0 9px;font-size:12px">Titel von Strava</span> Garmin-Name: ${esc(a.name)}</div>`:''}
- <div class="kv kvt" style="margin-bottom:14px">${tourKv(a,s,pace,avgTxt)}</div><button class="morebtn dmorebtn" id="dmb" aria-expanded="${!!S.dmore}"><span><b>${S.dmore?'Weniger':'Mehr'}</b></span>${ic(S.dmore?'x':'next',16)}</button><div id="dmore" class="${S.dmore?'open':''}">${a.sx?`<div class="kv" style="margin:-4px 0 14px"><div><b>${a.sx.ach}</b><span>Strava-Erfolge</span></div><div><b>${a.sx.pr}</b><span>Bestzeiten (PR)</span></div>${a.sx.pow?`<div><b>${a.sx.pow} W</b><span>Ø Leistung</span></div>`:''}${a.sx.cad?`<div><b>${a.sx.cad} spm</b><span>Ø Kadenz</span></div>`:''}${a.sx.gear?`<div><b>${esc(a.sx.gear)}</b><span>Fahrrad</span></div>`:''}<div><b>${esc(a.sx.dev)}</b><span>Gerät</span></div></div>`:''}
- ${jointHtml(a)}${a.gps&&a.tr?`<div class="seg" id="dt" style="margin-bottom:10px">${[['profil','Profil'],['splits','Splits'],['zonen','Pulszonen']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.dtab===k}">${n}</button>`).join('')}</div><div id="dbody"></div>`:`<div class="note">${a.live?'Höhenprofil, Tempo und Splits liefert das inReach-Add-on, sobald es angebunden ist.':a.gps?'Höhenprofil, Tempo und Splits kommen mit dem Archiv. Pulszonen und Erholungshinweis gibt es schon.':'Keine GPS-Route bei dieser Aktivität. Pulszonen und Erholungshinweis gibt es trotzdem.'}</div><div id="dbody" style="margin-top:10px"></div>`}
+ <div class="kv kvt" style="margin-bottom:14px">${tourKv(a,s,pace,avgTxt)}${a.sx?`<div><b>${a.sx.ach}</b><span>Strava-Erfolge</span></div><div><b>${a.sx.pr}</b><span>Bestzeiten (PR)</span></div>${a.sx.pow?`<div><b>${a.sx.pow} W</b><span>Ø Leistung</span></div>`:''}${a.sx.cad?`<div><b>${a.sx.cad} spm</b><span>Ø Kadenz</span></div>`:''}${a.sx.gear?`<div class="kvl"><b>${esc(a.sx.gear)}</b><span>Fahrrad</span></div>`:''}<div class="kvl"><b>${esc(a.sx.dev)}</b><span>Gerät</span></div>`:''}</div><div id="dmore">
+ ${jointHtml(a)}${a.gps&&a.tr?`<div class="seg" id="dt" style="margin-bottom:10px">${[['profil','Profil'],['splits','Splits'],['zonen','Pulszonen']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.dtab===k}">${n}</button>`).join('')}</div><div id="dbody"></div>`:`<div class="note">${a.live?'Höhenprofil, Tempo und Splits liefert das inReach-Add-on, sobald es angebunden ist.':a.gps?'Höhenprofil, Tempo und Splits kommen mit dem Archiv. Pulszonen gibt es schon.':'Keine GPS-Route bei dieser Aktivität. Pulszonen gibt es trotzdem.'}</div><div id="dbody" style="margin-top:10px"></div>`}
  </div></div>`;
- const dmb=$('#dmb');if(dmb)dmb.onclick=()=>{S.dmore=!S.dmore;detail()};
  const dt=$('#dt');if(dt)dt.onclick=e=>{const b=e.target.closest('button');if(!b)return;S.dtab=b.dataset.k;$$('#dt button').forEach(x=>x.setAttribute('aria-pressed',x===b));dbody(a)};
  dbody(a)}
 function zonesOf(a){const z=[0,0,0,0,0],T=a.tr;if(a.zones&&a.zones.some(x=>x>0))return a.zones.slice();if(!T||T.nohr)return z;for(let i=1;i<T.hr.length;i++){const h=T.hr[i],k=h<111?0:h<130?1:h<148?2:h<167?3:4;z[k]+=T.t[i]-T.t[i-1]}return z}
