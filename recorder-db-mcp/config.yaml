@@ -3,9 +3,10 @@ version: "0.4.0"
 slug: recorder-db-mcp
 description: Read-only MCP server for the Home Assistant recorder database (PostgreSQL)
 url: https://github.com/Janhsen/ha-addons/tree/main/recorder-db-mcp
+# Prebuilt image from .github/workflows/recorder-db-mcp.yml; only amd64 is built.
+image: ghcr.io/janhsen/{arch}-addon-recorder-db-mcp
 arch:
   - amd64
-  - aarch64
 startup: application
 boot: auto
 apparmor: true

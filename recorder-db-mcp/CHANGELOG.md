@@ -11,6 +11,7 @@
 - Server blockiert bei langen Abfragen nicht mehr alle anderen Anfragen.
 - Der Assistent wird angewiesen, Datenbanktexte nur als Daten zu behandeln.
 - Korrekturen: Datum ohne Zeitzone gilt jetzt als Berliner Zeit, `days` zählt volle lokale Tage, Eingaben werden geprüft (`days` 1–3650, `period`, `agg`), NaN/Infinity ergeben `null`, Suchtext wird wörtlich genommen (`_` und `%`), `entity_history` ohne Zeitraum liefert die neuesten Zustände, `daily`/`summary` mit Lücken bei Zählern und leeren Stundenwerten korrigiert, `gaps` erkennt Stunden- und Tagesreihen über den Median der Abstände.
+- Das Image wird jetzt auf GitHub gebaut und von dort geladen (nur amd64), Updates gehen schneller und der Bau ist nachvollziehbar.
 - Optionsgrenzen: `max_rows` höchstens 20000, `statement_timeout_s` höchstens 300.
 
 ## 0.3.0
