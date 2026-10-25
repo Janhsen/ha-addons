@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- Korrektur: `statistics` liefert ohne Zeitangabe jetzt die neuesten Zeilen (vorher die ältesten), wie `entity_history`; die Ausgabe bleibt nach Zeit aufsteigend sortiert.
+
 ## 0.5.1
 
 - Schneller: Gleiche Abfragen der Statistik-Werkzeuge (`daily`, `compare`, `summary`, `gaps`, `find_series`, `statistics`) werden 45 s aus dem Speicher beantwortet (Option „Zwischenspeicher“, 0 = aus). `latest` und `run_query` bleiben immer live.

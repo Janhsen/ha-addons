@@ -183,3 +183,19 @@ def test_cache_expires(db, monkeypatch):
     time.sleep(1.2)
     db._run_c("select 2")
     assert len(calls) == 2
+
+
+def test_statistics_defaults_to_newest(db, monkeypatch):
+    monkeypatch.setattr(db, "CACHE_S", 0)
+    have = db._run("select to_regclass('public.statistics') is not null and to_regclass('public.statistics_meta') is not null")
+    if not have["rows"][0][0]:
+        pytest.skip("recorder tables not present in the test database")
+    meta = db._run("select statistic_id from statistics_meta limit 1")["rows"]
+    if not meta:
+        pytest.skip("no statistics in the test database")
+    import asyncio
+
+    rows = asyncio.run(db.statistics(meta[0][0], limit=3))["rows"]
+    assert [r[0] for r in rows] == sorted(r[0] for r in rows)
+    newest = db._run("select to_timestamp(max(start_ts)) from statistics st join statistics_meta m on m.id=st.metadata_id where m.statistic_id=%s", (meta[0][0],))["rows"][0][0]
+    assert rows[-1][0] == newest

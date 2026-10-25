@@ -586,11 +586,13 @@ def statistics(
 
     period: "hour" (table statistics, kept forever) or "5minute" (statistics_short_term).
     start/end: ISO 8601 (without zone = Europe/Berlin), end exclusive.
+    Without start and end you get the NEWEST `limit` rows (still listed oldest first).
     Returns start time, mean, min, max, state and sum plus the unit.
     """
     table = "statistics_short_term" if period == "5minute" else "statistics"
     start_ts, end_ts = _window(None, start, end)
-    return _run_c(
+    newest = start_ts is None and end_ts is None
+    res = _run_c(
         f"""
         SELECT to_timestamp(st.start_ts) AS start, st.mean, st.min, st.max, st.state, st.sum,
                m.unit_of_measurement AS unit
@@ -599,11 +601,14 @@ def statistics(
         WHERE m.statistic_id = %s
           AND (%s::float8 IS NULL OR st.start_ts >= %s::float8)
           AND (%s::float8 IS NULL OR st.start_ts <  %s::float8)
-        ORDER BY st.start_ts
+        ORDER BY st.start_ts {"DESC" if newest else ""}
         """,
         (statistic_id, start_ts, start_ts, end_ts, end_ts),
         max_rows=limit,
     )
+    if newest:
+        res["rows"].reverse()
+    return res
 
 
 def _meta(statistic_id: str) -> dict[str, Any] | None:
