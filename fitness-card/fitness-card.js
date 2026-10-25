@@ -223,13 +223,12 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .sbar{position:relative;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}.sbar i{display:block;height:100%;border-radius:3px}
 .sbar u{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--text) 22%,transparent);border-radius:3px}
 .hint{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:var(--surface2);font-size:13px;line-height:1.4}.hint svg.i{width:18px;height:18px;margin-top:1px;color:var(--warn)}.hint b{font-weight:600}
-.bedc svg{width:100%;height:auto;display:block}.bedc text{fill:var(--text2);font:11px -apple-system,system-ui,sans-serif}.bedc .g{stroke:var(--grid);stroke-width:1}.bedc .rg{margin-top:10px}
+.bedc svg{width:100%;height:auto;display:block}.bedc text{fill:var(--text2);font:11px -apple-system,system-ui,sans-serif}.bedc .g{stroke:var(--grid);stroke-width:1}.bedc .rg{margin-top:10px}.bedc .bplot{touch-action:pan-y;-webkit-user-select:none;user-select:none;cursor:pointer;border-radius:10px}.bedc .bplot:focus-visible{outline:2px solid var(--p1);outline-offset:2px}.bedc .bleg{margin-top:8px}.bedc .bsw{display:inline-block;width:16px;height:0;vertical-align:middle}.bedc .bdet{margin-top:12px;border-top:1px solid var(--sep);padding-top:10px}.bedc .bdur{font-size:11px}.bedc .bdh{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}.bedc .bnav{display:flex;gap:8px}.bedc .bnav .ib{width:44px;height:44px}.bedc .bnav .ib:disabled{opacity:.35}
 .sx2{margin-top:10px;border-top:1px solid var(--sep);padding-top:10px}
 .sx2 p{margin:8px 0 0;font-size:13px}
 .sx2 .srow{grid-template-columns:auto minmax(40px,1fr) auto;gap:10px;font-size:15px;min-width:0}
 .ovl{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text2);margin-top:6px}
-.swin{position:relative;height:14px;border-radius:7px;background:var(--surface2);margin:10px 0 18px}.swin i{position:absolute;top:0;bottom:0;border-radius:7px}
-.swin u{position:absolute;top:16px;transform:translateX(-50%);font-size:11px;color:var(--text2);text-decoration:none;white-space:nowrap}
+.swin2{margin:12px 0 4px;min-height:44px;border-radius:10px}.swin2:focus-visible{outline:2px solid var(--p1);outline-offset:2px}.swin2 svg{width:100%;height:auto;display:block}.swin2 text{fill:var(--text2);font:11px -apple-system,system-ui,sans-serif}.swin2 .g{stroke:var(--grid);stroke-width:1}.swin2 .sout{fill:var(--text);font-weight:400}.swin2 .sin{fill:var(--surface);font-weight:600}.swin2 .sdur{font-size:12px}
 .wkb{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:92px;margin:8px 0 4px}
 .wkb div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;height:100%;font-size:11px;color:var(--text2)}
 .wkb i{display:block;width:100%;max-width:26px;border-radius:5px;background:var(--c-act);min-height:2px}
@@ -680,7 +679,7 @@ for(const w of['p1','p2']){const r=rng(w==='p1'?5:9),r2=rng(w==='p1'?77:78),T=TO
   if(la)T.last={id:la.id,aer:w==='p1'?1.1:2.4,ana:w==='p1'?1.2:0.4,load:w==='p1'?33:61}}}
 }
 /* ---------- Zustand ---------- */
-function initState(){S={tab:'heute',who:'p1',sel:null,sports:new Set(),range:null,play:false,day:ND,card:null,dspan:7,preset:'30',metric:'steps',span:'week',dtab:'profil',dmet:'hr',cursor:null,view:null}}
+function initState(){S={tab:'heute',who:'p1',sel:null,sports:new Set(),range:null,play:false,day:ND,card:null,dspan:7,preset:'30',metric:'steps',span:'week',dtab:'profil',dmet:'hr',bedSel:null,cursor:null,view:null}}
 const TABS=[['heute','Heute','sun','var(--tc-h)'],['tour','Touren','map','var(--tc-t)'],['trend','Trends','chart','var(--tc-s)']];
 let WHO=[['p1',PERS.p1.n],['p2',PERS.p2.n],['both','Beide (Test)']];
 function persons(){return S.who==='both'?['p1','p2']:[S.who]}
@@ -939,13 +938,26 @@ function bedrecHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.bedrec;if(!x)return'
  if(x.bed!=null&&x.wake!=null)k.push(`<div><b>${clk(x.bed)}</b><span>Ins Bett</span></div><div><b>${clk(x.wake)}</b><span>Aufstehen</span></div>`);
  if(ok(x.need))k.push(`<div><b>${hmm(x.need)}</b><span>Schlafbedarf</span></div>`);
  return k.length?`<div class="sx2"><b>Empfehlung für heute Abend</b><div class="kv kvt" style="margin-top:8px">${k.join('')}</div><p class="muted sm">Zeiten und Bedarf von Garmin, nichts selbst gerechnet.</p></div>`:''}
-function sleeptHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleept,d=DAILY[w][di];if(!x)return'';
- const inbed=(x.wake-x.bed)/6e4;if(!(inbed>0))return'';const sl=ok(d.slp)&&d.slp>0?d.slp:null;
- const wd=new Date(x.wake),S0=new Date(wd.getFullYear(),wd.getMonth(),wd.getDate()-1,18).getTime(),E=new Date(wd.getFullYear(),wd.getMonth(),wd.getDate(),12).getTime(),sp=E-S0,pc=ms=>Math.max(0,Math.min(100,(ms-S0)/sp*100));
- const tk=[[S0,'18'],[new Date(wd.getFullYear(),wd.getMonth(),wd.getDate()).getTime(),'0'],[new Date(wd.getFullYear(),wd.getMonth(),wd.getDate(),6).getTime(),'6'],[E,'12']].map(([m,t])=>`<u style="left:${pc(m)}%">${t}</u>`).join(''),l=pc(x.bed),r=Math.max(l+1,pc(x.wake));
- return`<div class="sx2"><b>Schlafzeiten</b><div class="kv kvt" style="margin-top:8px"><div><b>${clk(x.bed)}</b><span>Ins Bett</span></div><div><b>${clk(x.wake)}</b><span>Aufgestanden</span></div><div><b>${hmm(inbed)}</b><span>Im Bett</span></div>${sl!=null?`<div><b>${hmm(sl)}</b><span>Geschlafen</span></div>`:''}</div>
- <div class="swin" role="img" aria-label="Schlaffenster von ${clk(x.bed)} bis ${clk(x.wake)}"><i style="left:${l}%;width:${r-l}%;background:var(--c-sleep)"></i>${tk}</div>
- ${sl!=null&&inbed>=sl?`<p class="muted sm">Von ${hmm(inbed)} im Bett waren ${hmm(sl)} Schlaf. Der Rest war wach oder vor dem Einschlafen.</p>`:''}${exNote()}</div>`}
+function sleeptHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleept,d=DAILY[w][di];if(!x||!ok(x.bed)||!ok(x.wake))return'';
+ const inbed=(x.wake-x.bed)/6e4;if(!(inbed>0))return'';const sl=ok(d.slp)&&d.slp>0?d.slp:null,H=36e5;
+ /* Garmins Empfehlung gilt für die kommende Nacht: gleiche Uhrzeiten, einen Tag früher auf derselben Achse */
+ const r0=T.bedrec,back=ms=>{const q=new Date(ms);q.setDate(q.getDate()-1);return q.getTime()},rec0=r0&&ok(r0.bed)&&ok(r0.wake)&&r0.wake>r0.bed?{bed:back(r0.bed),wake:back(r0.wake)}:null;
+ /* Achse eng am Schlaf: volle Stunde vor Bett bis volle Stunde nach Aufstehen; die Empfehlung nur, wenn sie höchstens eine Stunde darüber hinausgeht (dann wird die Achse erweitert), sonst weggelassen */
+ let t0=Math.floor(x.bed/H)*H,t1=Math.ceil(x.wake/H)*H;const rec=rec0&&rec0.bed>=t0-H&&rec0.wake<=t1+H?rec0:null;if(rec){t0=Math.min(t0,Math.floor(rec.bed/H)*H);t1=Math.max(t1,Math.ceil(rec.wake/H)*H)}const nH=Math.round((t1-t0)/H);
+ const W=360,ml=8,mr=30,pw=W-ml-mr,X=ms=>ml+(ms-t0)/(t1-t0)*pw,y1=6,hb=20,y2=y1+hb+10,hr=16,hp=y1+hb+(rec?4:0),Ht=hp+22,step=nH>9?2:1;
+ let g='';for(let i=0;i<=nH;i+=1){const ms=t0+i*H;g+=`<line class="g" x1="${X(ms)}" x2="${X(ms)}" y1="0" y2="${hp+4}"/>`;if(i%step===0)g+=`<text x="${X(ms)}" y="${Ht-6}" text-anchor="middle">${String(new Date(ms).getHours()).padStart(2,'0')}</text>`}
+ g+=`<text x="${W}" y="${Ht-6}" text-anchor="end">Uhr</text>`;
+ const xb=X(x.bed),xw=X(x.wake),rr=hb/2;
+ g+=`<rect class="wbar" x="${xb}" y="${y1}" width="${xw-xb}" height="${hb}" rx="${rr}" style="fill:color-mix(in srgb,var(--c-sleep) 78%,transparent)"/>`;
+ const inL=xb-ml<44,inR=(W-mr)-xw<44;
+ g+=inL?`<text class="sin" x="${xb+rr}" y="${y1+hb/2+4}" text-anchor="start">${clk(x.bed)}</text>`:`<text class="sout" x="${xb-6}" y="${y1+hb/2+4}" text-anchor="end">${clk(x.bed)}</text>`;
+ g+=inR?`<text class="sin" x="${xw-rr}" y="${y1+hb/2+4}" text-anchor="end">${clk(x.wake)}</text>`:`<text class="sout" x="${xw+6}" y="${y1+hb/2+4}" text-anchor="start">${clk(x.wake)}</text>`;
+ if(xw-xb>=(inL?64:0)+(inR?64:0)+96)g+=`<text class="sin sdur" x="${(xb+xw)/2}" y="${y1+hb/2+4}" text-anchor="middle">${hmm(inbed)}</text>`;
+ if(rec){const rb=X(rec.bed),rw=X(rec.wake),ry=y1-3,rh=hb+6;g+=`<rect class="srec" x="${rb}" y="${ry}" width="${rw-rb}" height="${rh}" rx="${rh/2}" style="fill:none;stroke:var(--c-sleep);stroke-width:1;stroke-dasharray:3 3"/>`;
+  g+=`<text x="${ml}" y="${hp+14}" text-anchor="start">Gestrichelt: Empfehlung Garmin ${clk(r0.bed)}–${clk(r0.wake)}</text>`}
+ const al=`Ins Bett ${clk(x.bed)}, aufgestanden ${clk(x.wake)}, ${hmm(inbed)} im Bett${sl!=null?', '+hmm(sl)+' geschlafen':''}${rec?'. Empfehlung von Garmin: '+clk(r0.bed)+' bis '+clk(r0.wake):''}`;
+ return`<div class="sx2"><b>Schlafzeiten</b><div class="kv kvt" style="margin-top:8px"><div><b>${clk(x.bed)}</b><span>Ins Bett</span></div><div><b>${clk(x.wake)}</b><span>Aufgestanden</span></div>${sl!=null?`<div><b>${hmm(sl)}</b><span>Geschlafen</span></div>`:''}</div>
+ <div class="swin2" tabindex="0" role="img" aria-label="${esc(al)}"><svg viewBox="0 0 ${W} ${Ht}">${g}</svg></div>${exNote()}</div>`}
 /* HRV in der Nacht: Verlauf aus den Verlaufssensoren, Bandbreite „ausgeglichen“ nur bei Connect */
 function hrvDemo(w,di){const r=rng(di*29+(w==='p1'?5:9)),base=DAILY[w][di].hrv||60,pts=[];for(let m=20;m<=7*60;m+=5){const h=m/60;pts.push([h,Math.max(25,base+14*Math.sin(h*1.3)+(r()-.5)*22)])}return pts}
 function hrvChartHtml(w,di,dl){return`<div class="dday"><b>HRV in der Nacht zu ${dl}</b><div class="chartbox" id="ddv-${w}" style="margin-top:8px"></div><div class="muted sm" id="ddvn-${w}" style="margin-top:6px"></div></div>`}
@@ -1366,19 +1378,66 @@ function rangeCard(){const box=$('#rcard');if(!box)return;const r=S.rng||(S.rng=
   if(S.kpi){const[kw,kk]=S.kpi.split('|'),cb=$('#kc-'+kw);if(cb&&ps.includes(kw)){const vals=DAILY[kw].slice(r.a,r.b+1).map(d=>d[kk]),sum=['dist','ascent','dur','load','steps'].includes(kk);scrollChart(cb,{mode:sum?'stack':'line',n:vals.length,vis:Math.min(vals.length,45),h:170,series:[{n:KN[kk],c:`var(${PERS[kw].c})`,v:vals}],labels:i=>dfmt(dAt((r.a+i)),{weekday:'short',day:'numeric',month:'numeric'}),short:i=>dfmt(dAt((r.a+i)),{day:'numeric',month:'numeric'}),tfmt:kk==='slp'?hmm:f1,yfmt:kk==='slp'?(x=>f1(x/60)+' h'):f0,sel:-1,aria:KN[kk]})}}};
  show()}
 function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week'?7:S.span==='month'?30:90,from=Math.max(0,ND-n+1),idx=[];for(let i=from;i<=ND;i++)idx.push(i);
- const vals=ps.flatMap(w=>idx.map(i=>DAILY[w][i]).filter(d=>ok(d.bed)&&ok(d.wake)));
- const head=`<h2 class="h2">Schlafzeiten</h2><div class="muted sm" style="margin:-6px 0 10px">Ins Bett bis aufgestanden, je Nacht (${S.span==='week'?'7':S.span==='month'?'30':'90'} Tage). Nächte ohne Wert bleiben leer.</div>`;
+ const has=d=>ok(d.bed)&&ok(d.wake),rowOf=(w,i)=>DAILY[w][i],vals=ps.flatMap(w=>idx.map(i=>rowOf(w,i)).filter(has));
+ const head=`<h2 class="h2">Schlafzeiten</h2><div class="muted sm" style="margin:-6px 0 10px">Ins Bett bis aufgestanden, je Nacht (${n} Tage), darunter Schlafdauer und Schlafwert. Nächte ohne Wert bleiben leer. Tippe auf eine Nacht oder wähle sie mit den Pfeiltasten.</div>`;
  if(!vals.length){box.innerHTML=head+'<div class="muted">Noch keine Schlafzeiten im Verlauf.</div>';return}
- const W=Math.max(300,box.clientWidth-32||600),H=210,m={l:30,r:6,t:8,b:22},w=W-m.l-m.r,h=H-m.t-m.b;
- const lo=Math.floor(Math.min(...vals.map(d=>d.bed),0)/120)*120-120,hi=Math.ceil(Math.max(...vals.map(d=>d.wake))/120)*120+60,Y=v=>m.t+(v-lo)/(hi-lo)*h,X=i=>m.l+(i+.5)/idx.length*w,bw=Math.max(3,Math.min(22,w/idx.length*(ps.length>1?.36:.6)));
- let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Schlafzeiten je Nacht, ins Bett bis aufgestanden">`;
+ /* Garmins Empfehlung gilt nur für die kommende Nacht und erscheint nur, wenn Garmin sie liefert (nichts wird selbst berechnet) */
+ const nextMid=new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()+1).getTime(),
+  rec=ps.map(w=>{const r=TODAYV[w]&&TODAYV[w].bedrec;return r&&ok(r.bed)&&ok(r.wake)&&r.wake>r.bed?{bed:Math.round((r.bed-nextMid)/6e4),wake:Math.round((r.wake-nextMid)/6e4)}:null}),anyRec=rec.some(Boolean),ns=idx.length+(anyRec?1:0);
+ const fm=v=>{v=((Math.round(v)%1440)+1440)%1440;return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0')},hc=m=>Math.floor(m/60)+':'+String(Math.round(m%60)).padStart(2,'0');
+ /* Auswahl: letzte Nacht mit Wert, sonst die vom Nutzer gewählte (Nacht-Index oder 'rec') */
+ const lastI=Math.max(...ps.flatMap(w=>idx.filter(i=>has(rowOf(w,i)))));
+ let sel=S.bedSel;if(!(sel==='rec'&&anyRec)&&!(Number.isInteger(sel)&&sel>=from&&sel<=ND))sel=lastI;
+ const lo=Math.floor(Math.min(...vals.map(d=>d.bed),...rec.filter(Boolean).map(r=>r.bed),0)/120)*120-120,hi=Math.ceil(Math.max(...vals.map(d=>d.wake),...rec.filter(Boolean).map(r=>r.wake))/120)*120+90;
+ const W=Math.max(300,box.clientWidth-32||600),m={l:34,r:46,t:10,b:22},w=W-m.l-m.r,h1=170,gap=26,h2=84,y2=m.t+h1+gap,H=y2+h2+m.b,colw=w/ns;
+ const Y=v=>m.t+(v-lo)/(hi-lo)*h1,X=k=>m.l+(k+.5)/ns*w,bw=Math.max(3,Math.min(14,colw*(ps.length>1?.3:.5))),offOf=pi=>ps.length>1?(pi?bw/2+1:-bw/2-1):0;
+ const slp=ps.flatMap(w=>idx.map(i=>rowOf(w,i).slp).filter(ok)),hmax=Math.max(9,Math.ceil(Math.max(0,...slp)/60)),Y2=min=>y2+h2-(min/60)/hmax*h2,Y3=v=>y2+h2-Math.max(0,Math.min(100,v))/100*h2;
+ const kOf=i=>i===undefined?-1:i-from,selK=sel==='rec'?idx.length:kOf(sel);
+ let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Schlafzeiten je Nacht (ins Bett bis aufgestanden) und darunter Schlafdauer und Schlafwert">`;
+ /* Wochenenden (Aufstehtag Samstag oder Sonntag) und gewählte Nacht */
+ idx.forEach((i,k)=>{const dw=dAt(i).getDay();if(dw===0||dw===6)g+=`<rect class="bwe" x="${m.l+k*colw}" y="${m.t}" width="${colw}" height="${y2+h2-m.t}" style="fill:var(--text);opacity:.05"/>`});
+ if(selK>=0)g+=`<rect class="bsel" x="${m.l+selK*colw}" y="${m.t}" width="${colw}" height="${y2+h2-m.t}" rx="4" style="fill:var(--surface2)"/>`;
  for(let t=Math.ceil(lo/120)*120;t<=hi;t+=120){const hh=((t%1440)+1440)%1440/60;g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${m.l-6}" y="${Y(t)+4}" text-anchor="end">${String(hh).padStart(2,'0')}</text>`}
+ /* Mittellinien: Durchschnitt von Bett und Aufstehen je Person */
+ ps.forEach((pw,pi)=>{const r=idx.map(i=>rowOf(pw,i)).filter(has);if(!r.length)return;const ab=r.reduce((s,d)=>s+d.bed,0)/r.length,aw=r.reduce((s,d)=>s+d.wake,0)/r.length;
+  for(const[v,t]of[[ab,'Bett'],[aw,'Aufstehen']]){g+=`<line class="bavg" x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:var(${PERS[pw].c});stroke-width:1;stroke-dasharray:2 4;opacity:.5"/>`;
+   if(ps.length===1)g+=`<text x="${W-m.r+4}" y="${Y(v)+4}" style="fill:var(${PERS[pw].c});font-weight:400">Ø ${fm(v)}</text>`}});
+ /* Balken je Nacht, letzte Nacht mit Ring, Dauer darunter wenn Platz ist */
+ const lab=colw>=(ps.length>1?58:34);
+ ps.forEach((pw,pi)=>{const last=Math.max(...idx.filter(i=>has(rowOf(pw,i))),-1);idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!has(d))return;const x=X(k)+offOf(pi)-bw/2,y=Y(d.bed),ht=Math.max(2,Y(d.wake)-y);
+  g+=`<rect class="bbar${i===last?' blast':''}" data-i="${i}" x="${x}" y="${y}" width="${bw}" height="${ht}" rx="${Math.min(5,bw/2)}" style="fill:var(${PERS[pw].c});opacity:${i===last?1:.78}${i===last?';stroke:var(--text);stroke-width:1':''}"/>`;
+  if(lab)g+=`<text class="bdur" x="${X(k)+offOf(pi)}" y="${y+ht+12}" text-anchor="middle">${hc(d.wake-d.bed)}</text>`})});
+ /* Empfehlung für die kommende Nacht: gestrichelter Rahmen */
+ if(anyRec)ps.forEach((pw,pi)=>{const r=rec[pi];if(!r)return;g+=`<rect class="brec" x="${X(idx.length)+offOf(pi)-bw/2}" y="${Y(r.bed)}" width="${bw}" height="${Math.max(2,Y(r.wake)-Y(r.bed))}" rx="${Math.min(5,bw/2)}" style="fill:none;stroke:var(${PERS[pw].c});stroke-width:1;stroke-dasharray:3 2"/>`});
+ /* Zweite Spur: Schlafdauer (Balken) und Schlafwert (Linie), gleiche Nächte */
+ g+=`<text x="${m.l}" y="${y2-8}" style="font-weight:600;fill:var(--text)">Schlafdauer und Schlafwert</text>`;
+ for(const t of[0,4,8].filter(t=>t<=hmax))g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${Y2(t*60)}" y2="${Y2(t*60)}"/><text x="${m.l-6}" y="${Y2(t*60)+4}" text-anchor="end">${t} h</text>`;
+ for(const t of[50,100])g+=`<text x="${W-m.r+4}" y="${Y3(t)+4}">${t}</text>`;
+ ps.forEach((pw,pi)=>{idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!ok(d.slp)||d.slp<=0)return;g+=`<rect class="bdd" x="${X(k)+offOf(pi)-bw/2}" y="${Y2(d.slp)}" width="${bw}" height="${Math.max(1,y2+h2-Y2(d.slp))}" rx="${Math.min(3,bw/2)}" style="fill:${mix(PERS[pw].c,30)}"/>`});
+  let seg=[];const flush=()=>{if(seg.length>1)g+=`<polyline class="bsc" points="${seg.join(' ')}" style="fill:none;stroke:var(${PERS[pw].c});stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round"/>`;seg=[]};
+  idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!ok(d.sleep)){flush();return}seg.push((X(k)+offOf(pi)).toFixed(1)+','+Y3(d.sleep).toFixed(1))});flush();
+  idx.forEach((i,k)=>{const d=rowOf(pw,i);if(ok(d.sleep))g+=`<circle class="bsd" cx="${X(k)+offOf(pi)}" cy="${Y3(d.sleep)}" r="${i===sel?4:2.6}" style="fill:var(${PERS[pw].c});stroke:var(--surface);stroke-width:1.4"/>`})});
  const step=Math.ceil(idx.length/6);idx.forEach((i,k)=>{if(k%step===0||k===idx.length-1)g+=`<text x="${X(k)}" y="${H-6}" text-anchor="middle">${dfmt(dAt(i),{day:'numeric',month:'numeric'})}</text>`});
- ps.forEach((pw,pi)=>idx.forEach((i,k)=>{const d=DAILY[pw][i];if(!ok(d.bed)||!ok(d.wake))return;const off=ps.length>1?(pi?bw/2+1:-bw/2-1):0;g+=`<rect x="${X(k)+off-bw/2}" y="${Y(d.bed)}" width="${bw}" height="${Math.max(2,Y(d.wake)-Y(d.bed))}" rx="${Math.min(5,bw/2)}" style="fill:var(${PERS[pw].c})"/>`}));
  g+='</svg>';
- const fm=v=>{v=((Math.round(v)%1440)+1440)%1440;return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0')},rg=ps.map(pw=>{const r=idx.map(i=>DAILY[pw][i]).filter(d=>ok(d.bed)&&ok(d.wake));if(!r.length)return'';const b=r.map(d=>d.bed),a=r.map(d=>d.wake);
-  return`<div class="sm"><b>${ps.length>1?esc(PERS[pw].n)+': ':''}</b>Ins Bett ${fm(Math.min(...b))} bis ${fm(Math.max(...b))}, aufgestanden ${fm(Math.min(...a))} bis ${fm(Math.max(...a))} <span class="muted">(${r.length} von ${idx.length} Nächten)</span></div>`}).join('');
- box.innerHTML=head+g+`<div class="rg">${rg}</div>`}
+ /* Details der gewählten Nacht */
+ const nm=w=>ps.length>1?`<div class="sm" style="font-weight:600;margin:8px 0 2px"><span class="dot" style="background:var(${PERS[w].c});margin-right:6px"></span>${esc(PERS[w].n)}</div>`:'';
+ const cur0=sel==='rec'?idx.length:sel-from,nav=t=>`<div class="bdh"><div style="font-weight:600">${t}</div><div class="bnav"><button type="button" class="ib" data-bn="-1" aria-label="Vorherige Nacht"${cur0<=0?' disabled':''}>${ic('prev',20)}</button><button type="button" class="ib" data-bn="1" aria-label="Nächste Nacht"${cur0>=ns-1?' disabled':''}>${ic('next',20)}</button></div></div>`;
+ let det;
+ if(sel==='rec'){const rows=ps.map((pw,pi)=>{const r=rec[pi];if(!r)return'';return nm(pw)+`<div class="kv kvt"><div><b>${fm(r.bed)}</b><span>Ins Bett</span></div><div><b>${fm(r.wake)}</b><span>Aufstehen</span></div><div><b>${hmm(r.wake-r.bed)}</b><span>Im Bett</span></div></div>`}).join('');
+  det=`<div class="bdet" aria-live="polite">${nav('Empfehlung von Garmin für heute Nacht')}${rows}</div>`}
+ else{const dt=dAt(sel),rows=ps.map(pw=>{const d=rowOf(pw,sel);if(!has(d)&&!ok(d.slp)&&!ok(d.sleep))return nm(pw)+'<div class="muted sm">Keine Werte für diese Nacht.</div>';
+   return nm(pw)+`<div class="kv kvt"><div><b>${has(d)?fm(d.bed):'–'}</b><span>Ins Bett</span></div><div><b>${has(d)?fm(d.wake):'–'}</b><span>Aufgestanden</span></div><div><b>${has(d)?hmm(d.wake-d.bed):'–'}</b><span>Im Bett</span></div><div><b>${ok(d.slp)&&d.slp>0?hmm(d.slp):'–'}</b><span>Geschlafen</span></div><div><b>${ok(d.sleep)?f0(d.sleep):'–'}</b><span>Schlafwert</span></div></div>`}).join('');
+  det=`<div class="bdet" aria-live="polite">${nav('Nacht auf '+esc(dfmt(dt,{weekday:'long',day:'numeric',month:'long'})))}${rows}</div>`}
+ const rg=ps.map(pw=>{const r=idx.map(i=>rowOf(pw,i)).filter(has);if(!r.length)return'';const b=r.map(d=>d.bed),a=r.map(d=>d.wake),av=x=>x.reduce((s,y)=>s+y,0)/x.length;
+  return`<div class="sm"><b>${ps.length>1?esc(PERS[pw].n)+': ':''}</b>Ins Bett ${fm(Math.min(...b))} bis ${fm(Math.max(...b))}, aufgestanden ${fm(Math.min(...a))} bis ${fm(Math.max(...a))}, Ø ${fm(av(b))} und ${fm(av(a))} <span class="muted">(${r.length} von ${idx.length} Nächten)</span></div>`}).join('');
+ const lg=`<div class="lg bleg"><span><i class="bsw" style="border-top:2px dashed var(--text2)"></i>Durchschnitt</span>${anyRec?'<span><i class="bsw" style="border:1.5px dashed var(--text2);height:9px;border-radius:3px"></i>Empfehlung für heute Nacht (Garmin)</span>':''}<span><i class="bsw" style="background:var(--text);opacity:.08;height:9px"></i>Wochenende</span><span><i class="bsw" style="border:1.6px solid var(--text);height:9px;border-radius:3px"></i>letzte Nacht</span></div>`;
+ box.innerHTML=head+`<div class="bplot" tabindex="0" role="group" aria-label="Schlafzeiten je Nacht, mit Pfeiltasten eine Nacht wählen">${g}</div>${lg}${det}<div class="rg">${rg}</div>`;
+ const pl=box.querySelector('.bplot'),pick=k=>{k=Math.max(0,Math.min(ns-1,k));S.bedSel=k>=idx.length?'rec':idx[k];bedCard(ps);const p2=$('#bcard .bplot');if(p2&&box._kb)p2.focus()},
+  at=e=>{const r=pl.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W;return Math.floor((x-m.l)/w*ns)};
+ box.querySelectorAll('.bnav .ib').forEach(bt=>bt.addEventListener('click',()=>{const d=+bt.dataset.bn;box._kb=false;pick(cur0+d);const q=$('#bcard .bnav .ib[data-bn="'+d+'"]')||$('#bcard .bnav .ib:not([disabled])');if(q&&!q.disabled)q.focus();else if(q)$('#bcard .bnav .ib:not([disabled])')&&$('#bcard .bnav .ib:not([disabled])').focus()}));
+ pl.addEventListener('pointerdown',e=>{box._kb=false;pick(at(e))});
+ pl.addEventListener('pointermove',e=>{if(e.buttons&&e.pointerType!=='touch'){box._kb=false;pick(at(e))}});
+ pl.addEventListener('keydown',e=>{const cur=sel==='rec'?idx.length:sel-from,d={ArrowLeft:-1,ArrowRight:1}[e.key];let k=null;if(d)k=cur+d;else if(e.key==='Home')k=0;else if(e.key==='End')k=ns-1;if(k==null)return;e.preventDefault();box._kb=true;pick(k)})}
 function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
  const wk=ps.map(w=>{const a=weekSum(w,0),b=weekSum(w,7);return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">letzte 7 Tage gegen die 7 davor</span></div><div class="kv">${[['Distanz',uv(a.dist,' km'),dl(a.dist,b.dist)],['Aufstieg',uv(a.asc,' m'),dl(a.asc,b.asc)],['Dauer',uv(a.dur,' h',f1),dl(a.dur,b.dur)],['Aktivitäten',f0(a.n),ok(a.n)&&ok(b.n)?a.n-b.n:null]].map(([n,val,d],i)=>`<div><b>${val}</b><span>${n}</span><span class="delta">${d==null?'':(d>0?'+':'')+d+(i===3?'':' %')+' zur Vorwoche'}</span></div>`).join('')}</div></div>`}).join('');
  const sports=ps.map(w=>{const lo=ND-29,m={};for(const a of ACTS)if(a.who===w&&!a.live&&dayOf(a.date)>=lo&&ok((DAILY[w][dayOf(a.date)]||{}).dist))m[a.sport]=(m[a.sport]||0)+a.st.dur/3600;const e=Object.entries(m).sort((x,y)=>y[1]-x[1]),mx=Math.max(...e.map(x=>x[1]),1);
