@@ -13,5 +13,13 @@ configuration:
   log_level:
     name: Log level
     description: Verbosity of the app log.
+  rotate_secret:
+    name: Renew secret path
+    description: >-
+      Enter any new text and restart the app to create a new secret path (shown in the log).
+      Replace the connector with the new path afterwards.
+  hide_404_log:
+    name: Hide 404 lines in the log
+    description: Hides requests to unknown paths (mostly automated scanners) in the log.
 network:
   8099/tcp: MCP endpoint (streamable HTTP under a secret path)

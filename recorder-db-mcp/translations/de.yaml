@@ -13,5 +13,13 @@ configuration:
   log_level:
     name: Log-Level
     description: Ausführlichkeit des App-Protokolls.
+  rotate_secret:
+    name: Geheimen Pfad erneuern
+    description: >-
+      Beliebigen neuen Text eintragen und die App neu starten, dann wird ein neuer geheimer Pfad
+      erzeugt (im Protokoll zu sehen). Der Connector muss danach mit dem neuen Pfad ersetzt werden.
+  hide_404_log:
+    name: 404-Zeilen im Protokoll ausblenden
+    description: Blendet Zugriffe auf unbekannte Pfade (meist automatische Scanner) im Protokoll aus.
 network:
   8099/tcp: MCP-Endpunkt (Streamable HTTP unter geheimem Pfad)

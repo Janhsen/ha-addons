@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Neu: `summary` – Überblick über einen Sensor der letzten N Tage in einem Aufruf (letzter Tag, Mittel, Minimum, Maximum, Vergleich zur Vorperiode, Tage mit Daten, letzter Punkt).
+- Neu: `latest` – letzter aufgezeichneter Wert mehrerer Entitäten in einem Aufruf (IDs oder `%`-Muster); Reihen ohne Zustände fallen auf ihren neuesten Statistikpunkt zurück.
+- Neu: Option `rotate_secret` – beliebigen neuen Text eintragen und die App neu starten, um den geheimen Pfad zu erneuern (ohne Deinstallation).
+- Neu: Option `hide_404_log` (Standard an) – blendet 404-Zeilen automatischer Scanner im Protokoll aus.
+- Die bisherigen Werkzeuge bleiben unverändert.
+
 ## 0.2.0
 
 - Neu: `find_series` – Sensoren nach ID **oder Anzeigename** suchen, mit Quelle, Einheit, erstem/letztem Tag und Anzahl der Punkte.

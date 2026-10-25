@@ -11,7 +11,12 @@ Langzeitstatistiken und Ereignisse direkt per SQL abfragen.
 - Der Endpunkt liegt unter einem zufälligen, geheimen Pfad (`/<geheim>/mcp`). Der Pfad wird beim
   ersten Start erzeugt, in `/data` gespeichert und im App-Protokoll angezeigt. Wer den Pfad kennt,
   kann lesen – nur über einen vertrauenswürdigen Tunnel (z. B. Cloudflare) veröffentlichen.
-- Neuer geheimer Pfad: App deinstallieren und neu installieren (dabei wird `/data` geleert).
+- Neuer geheimer Pfad: in den Optionen bei „Geheimen Pfad erneuern“ (`rotate_secret`) einen beliebigen
+  neuen Text eintragen und die App neu starten. Der neue Pfad steht im Protokoll, der Connector muss
+  danach ersetzt werden.
+- Das Protokoll zeigt den geheimen Pfad in den Zeilen der Aufrufe – Protokolle nicht weitergeben.
+- Tipp: Im Tunnel (z. B. Cloudflare) nur den Pfad `/<geheim>/*` durchlassen, dann erreichen automatische
+  Scanner die App gar nicht. 404-Zeilen werden im Protokoll standardmäßig ausgeblendet (`hide_404_log`).
 
 ## Einrichtung
 
@@ -46,6 +51,8 @@ Langzeitstatistiken und Ereignisse direkt per SQL abfragen.
 | `daily` | Ein Wert pro lokalem Tag (Europe/Berlin): `mean`, `min`, `max`, `last` oder `change` (Zähler) |
 | `compare` | Bis zu 8 Sensoren nebeneinander, eine Zeile pro Tag |
 | `gaps` | Fehlende Stunden oder Tage einer Reihe (Auflösung `auto`, `hour` oder `day`) |
+| `summary` | Überblick über einen Sensor der letzten N Tage: letzter Tag, Mittel, Min, Max, Vergleich zur Vorperiode |
+| `latest` | Letzter aufgezeichneter Wert mehrerer Entitäten in einem Aufruf (IDs oder `%`-Muster) |
 | `find_entities` | Entitäten/Statistiken nach Namensteil suchen |
 | `entity_history` | Zustandsverlauf einer Entität, optional mit Attributen |
 | `statistics` | Langzeit- (`hour`) oder Kurzzeitstatistik (`5minute`) eines Sensors |

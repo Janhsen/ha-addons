@@ -27,6 +27,7 @@ from starlette.responses import JSONResponse
 
 OPTIONS_FILE = Path("/data/options.json")
 SECRET_FILE = Path("/data/secret_path")
+ROTATE_MARKER_FILE = Path("/data/rotate_marker")
 SECRETS_YAML = Path("/homeassistant/secrets.yaml")
 PORT = 8099
 
@@ -39,6 +40,8 @@ def load_options() -> dict[str, Any]:
         "max_rows": 5000,
         "statement_timeout_s": 30,
         "log_level": "info",
+        "rotate_secret": "",
+        "hide_404_log": True,
     }
     if OPTIONS_FILE.exists():
         opts.update(json.loads(OPTIONS_FILE.read_text()))
@@ -51,6 +54,18 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     stream=sys.stdout,
 )
+
+
+class _Hide404(logging.Filter):
+    """Drop access-log lines with status 404 (internet scanners probing the root path)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        return not (isinstance(args, tuple) and args and args[-1] == 404)
+
+
+if OPTS.get("hide_404_log", True):
+    logging.getLogger("uvicorn.access").addFilter(_Hide404())
 
 
 def load_db_url() -> str:
@@ -66,13 +81,25 @@ def load_db_url() -> str:
 
 
 def load_secret_path() -> str:
-    if SECRET_FILE.exists():
+    """Return the secret endpoint path.
+
+    A new path is created on first start, or whenever the option `rotate_secret` is set to a value
+    that differs from the one used at the last start (change it to any new text to rotate).
+    """
+    wanted = str(OPTS.get("rotate_secret") or "").strip()
+    seen = ROTATE_MARKER_FILE.read_text().strip() if ROTATE_MARKER_FILE.exists() else ""
+    rotate = bool(wanted) and wanted != seen
+    if wanted != seen:
+        ROTATE_MARKER_FILE.write_text(wanted)
+    if SECRET_FILE.exists() and not rotate:
         value = SECRET_FILE.read_text().strip()
         if value:
             return value
     value = secrets.token_urlsafe(32)
     SECRET_FILE.write_text(value)
     SECRET_FILE.chmod(0o600)
+    if rotate:
+        log.warning("Geheimer Pfad wurde erneuert (Option rotate_secret). Alten Connector in Claude ersetzen.")
     return value
 
 
@@ -97,6 +124,9 @@ Prefer the helper tools; use run_query only for anything they cannot do:
 - daily: one value per local day (Europe/Berlin) for one sensor - mean, min, max, last or change.
 - compare: several sensors side by side, one row per local day.
 - gaps: missing hours or days in a series, so gaps are not mistaken for measurements.
+- summary: compact overview of one sensor over N days (latest, mean, min, max, trend vs previous period).
+- latest: last recorded value of several entities in one call (ids or % patterns).
+Independent calls can be sent in parallel; use compare/latest to get several series in one call.
 - find_entities, entity_history, statistics: the simple building blocks.
 Convert *_ts with to_timestamp(x). Local time zone of the house: Europe/Berlin.
 """
@@ -295,13 +325,19 @@ def _local(ts: float | None) -> str | None:
 
 def _meta(statistic_id: str) -> dict[str, Any] | None:
     res = _run(
-        "SELECT name, unit_of_measurement, has_sum, source FROM statistics_meta WHERE statistic_id = %s",
+        "SELECT name, unit_of_measurement, has_sum, has_mean, source FROM statistics_meta WHERE statistic_id = %s",
         (statistic_id,),
     )
     if not res["rows"]:
         return None
-    name, unit, has_sum, source = res["rows"][0]
-    return {"name": name, "unit": unit, "has_sum": bool(has_sum), "source": source}
+    name, unit, has_sum, has_mean, source = res["rows"][0]
+    return {
+        "name": name,
+        "unit": unit,
+        "has_sum": bool(has_sum),
+        "has_mean": bool(has_mean),
+        "source": source,
+    }
 
 
 def _daily_rows(statistic_id: str, start_ts: float | None, end_ts: float | None, agg: str) -> list[list[Any]]:
@@ -546,6 +582,143 @@ def gaps(statistic_id: str, days: int = 60, resolution: str = "auto") -> dict[st
         "columns": res["columns"],
         "rows": res["rows"],
         "gap_count": res["row_count"],
+    }
+
+
+@mcp.tool()
+def summary(statistic_id: str, days: int = 14) -> dict[str, Any]:
+    """Compact overview of one sensor over the last `days` days, in one call.
+
+    Returns the latest day with its value, mean of the daily values, min and max, the mean of the
+    previous period of the same length with the difference, the number of days with data and the
+    time of the last point. Series with sums only (energy counters) use the daily change instead
+    of the mean. Use this for questions like "how was X lately?".
+    """
+    if days < 1:
+        return {"error": "days must be at least 1"}
+    meta = _meta(statistic_id)
+    if meta is None:
+        return {"error": f"No statistics for '{statistic_id}'. Use find_series to look it up."}
+    agg = "change" if meta["has_sum"] and not meta["has_mean"] else "mean"
+    start_ts, _ = _window(days, None, None)
+    assert start_ts is not None
+    cur = _daily_rows(statistic_id, start_ts, None, agg)
+    prev = _daily_rows(statistic_id, start_ts - days * 86400, start_ts, agg)
+    cur_vals = [float(v) for _, v in cur if v is not None]
+    prev_vals = [float(v) for _, v in prev if v is not None]
+    last = _run(
+        """
+        SELECT max(s.start_ts) FROM statistics s JOIN statistics_meta m ON m.id = s.metadata_id
+        WHERE m.statistic_id = %s
+        """,
+        (statistic_id,),
+    )["rows"][0][0]
+    out: dict[str, Any] = {
+        "statistic_id": statistic_id,
+        "name": meta["name"],
+        "unit": meta["unit"],
+        "agg": agg,
+        "window_days": days,
+        "days_with_data": len(cur_vals),
+        "last_point": _local(last),
+    }
+    if not cur_vals:
+        out["note"] = f"No values in the last {days} days."
+        return out
+    if agg == "mean":
+        lo, hi = _run(
+            """
+            SELECT min(s.min)::float8, max(s.max)::float8
+            FROM statistics s JOIN statistics_meta m ON m.id = s.metadata_id
+            WHERE m.statistic_id = %s AND s.start_ts >= %s::float8
+            """,
+            (statistic_id, start_ts),
+        )["rows"][0]
+    else:
+        lo, hi = min(cur_vals), max(cur_vals)
+    mean = round(sum(cur_vals) / len(cur_vals), 2)
+    out.update(
+        {
+            "latest_day": cur[-1][0],
+            "latest_value": cur[-1][1],
+            "mean": mean,
+            "min": lo,
+            "max": hi,
+        }
+    )
+    if prev_vals:
+        prev_mean = round(sum(prev_vals) / len(prev_vals), 2)
+        out["previous_mean"] = prev_mean
+        out["delta"] = round(mean - prev_mean, 2)
+        if prev_mean:
+            out["delta_percent"] = round((mean - prev_mean) / abs(prev_mean) * 100, 1)
+    return out
+
+
+@mcp.tool()
+def latest(entities: list[str] | str, limit: int = 50) -> dict[str, Any]:
+    """Last recorded value of one or more entities in a single call.
+
+    entities: a list or comma-separated string; each item is an exact entity/statistic id, or a
+    pattern with `%` (ILIKE, e.g. "sensor.%heart_rate"). Reads the last recorded state (with the
+    last real state if the newest row only updated attributes). Ids that have no states but
+    statistics (e.g. imported Garmin series) fall back to their newest statistic point.
+    Returns id, state, updated (Europe/Berlin), age_s (seconds since update), unit, source.
+    """
+    items = [s.strip() for s in entities.split(",")] if isinstance(entities, str) else list(entities)
+    items = [s for s in items if s]
+    if not items:
+        return {"error": "No entities given."}
+    exact = [i for i in items if "%" not in i]
+    like = [i for i in items if "%" in i]
+    res = _run(
+        """
+        SELECT m.entity_id, COALESCE(l.state, v.state) AS state,
+               to_char(to_timestamp(l.last_updated_ts) AT TIME ZONE %s, 'YYYY-MM-DD HH24:MI') AS updated,
+               round(extract(epoch from now()) - l.last_updated_ts)::bigint AS age_s,
+               sm.unit_of_measurement AS unit, 'state' AS source
+        FROM states_meta m
+        CROSS JOIN LATERAL (
+          SELECT s.state, s.last_updated_ts FROM states s
+          WHERE s.metadata_id = m.metadata_id ORDER BY s.last_updated_ts DESC LIMIT 1
+        ) l
+        LEFT JOIN LATERAL (
+          SELECT s.state FROM states s
+          WHERE s.metadata_id = m.metadata_id AND s.state IS NOT NULL ORDER BY s.last_updated_ts DESC LIMIT 1
+        ) v ON l.state IS NULL
+        LEFT JOIN statistics_meta sm ON sm.statistic_id = m.entity_id
+        WHERE m.entity_id = ANY(%s::text[]) OR m.entity_id ILIKE ANY(%s::text[])
+        ORDER BY 1
+        """,
+        (TZ, exact, like),
+        max_rows=limit,
+    )
+    rows = res["rows"]
+    missing = [e for e in exact if e not in {r[0] for r in rows}]
+    if missing:
+        fallback = _run(
+            """
+            SELECT m.statistic_id, COALESCE(l.mean, l.state)::text AS state,
+                   to_char(to_timestamp(l.start_ts) AT TIME ZONE %s, 'YYYY-MM-DD HH24:MI') AS updated,
+                   round(extract(epoch from now()) - l.start_ts)::bigint AS age_s,
+                   m.unit_of_measurement AS unit, 'statistics' AS source
+            FROM statistics_meta m
+            CROSS JOIN LATERAL (
+              SELECT s.mean, s.state, s.start_ts FROM statistics s
+              WHERE s.metadata_id = m.id ORDER BY s.start_ts DESC LIMIT 1
+            ) l
+            WHERE m.statistic_id = ANY(%s::text[])
+            ORDER BY 1
+            """,
+            (TZ, missing),
+        )
+        rows = rows + fallback["rows"]
+    return {
+        "columns": ["id", "state", "updated", "age_s", "unit", "source"],
+        "rows": rows,
+        "row_count": len(rows),
+        "not_found": [e for e in exact if e not in {r[0] for r in rows}],
+        "truncated": res["truncated"],
     }
 
 
