@@ -26,5 +26,8 @@ configuration:
   keep_connection_s:
     name: Verbindung offen halten (Sekunden)
     description: Wie lange eine Datenbankverbindung nach einer Abfrage offen bleibt, damit Folgeabfragen schneller sind. 0 = aus.
+  cache_s:
+    name: Zwischenspeicher für Statistik-Abfragen (Sekunden)
+    description: Gleiche Abfragen der Statistik-Werkzeuge werden so lange aus dem Speicher beantwortet. 0 = aus; latest und run_query sind immer live.
 network:
   8099/tcp: MCP-Endpunkt (Streamable HTTP unter geheimem Pfad)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import decimal
 import functools
+import copy
 import json
 import logging
 import math
@@ -38,7 +39,7 @@ ROTATE_MARKER_FILE = DATA_DIR / "rotate_marker"
 PORT = int(os.environ.get("PORT", "8099"))
 
 MAX_BYTES = 2_000_000  # byte budget of one result (the row limit alone does not bound the size)
-MAX_PARALLEL = 2  # simultaneous database queries
+MAX_PARALLEL = 4  # simultaneous database queries
 TZ = "Europe/Berlin"
 BERLIN = ZoneInfo(TZ)
 MAX_COMPARE = 8
@@ -61,6 +62,7 @@ def load_options() -> dict[str, Any]:
         "hide_404_log": True,
         "audit_log": True,
         "keep_connection_s": 60,
+        "cache_s": 45,
     }
     if OPTIONS_FILE.exists():
         opts.update(json.loads(OPTIONS_FILE.read_text()))
@@ -125,6 +127,7 @@ SECRET, SECRET_NEW = load_secret_path()
 MAX_ROWS = max(1, int(OPTS["max_rows"]))
 TIMEOUT_MS = max(1, int(OPTS["statement_timeout_s"])) * 1000
 KEEP_S = max(0, int(OPTS.get("keep_connection_s", 60)))  # idle time a connection stays open (0 = off)
+CACHE_S = max(0, int(OPTS.get("cache_s", 45)))  # seconds identical statistics queries are answered from memory (0 = off)
 MAX_AGE_S = 600  # a reused connection is replaced after this age
 try:
     _DB_PASSWORD = psycopg.conninfo.conninfo_to_dict(DB_URL).get("password") or ""
@@ -186,6 +189,13 @@ Prefer the helper tools; use run_query only for anything they cannot do:
 - summary: compact overview of one sensor over N days (latest, mean, min, max, trend vs previous period).
 - latest: last recorded value of several entities in one call (ids or % patterns).
 Independent calls can be sent in parallel; use compare/latest to get several series in one call.
+Choose the fastest path:
+- "How was X lately?" -> summary. Several sensors side by side -> compare. Long spans (months/years) -> daily
+  or the statistics tables, never the raw states table for more than about a week.
+- Joins, rolling averages, groupings over many sensors -> ONE run_query instead of many single calls.
+- Current values -> latest (patterns with %, several ids in one call). Gaps -> gaps, before reading a hole as a measurement.
+- Round numbers in SQL (round(x::numeric, 2)) and select only the columns you need: results stay small.
+Results of the statistics tools may be up to a minute old (short cache); latest and run_query are always live.
 - find_entities, entity_history, statistics: the simple building blocks.
 Dates without a time zone mean Europe/Berlin local time; `end` is exclusive.
 Convert *_ts with to_timestamp(x). Local time zone of the house: Europe/Berlin.
@@ -265,7 +275,7 @@ def _connect() -> psycopg.Connection:
             autocommit=False,
             connect_timeout=10,
             options=(
-                "-c default_transaction_read_only=on -c client_encoding=UTF8 "
+                "-c default_transaction_read_only=on -c client_encoding=UTF8 -c jit=off "
                 f"-c statement_timeout={TIMEOUT_MS} -c lock_timeout=5000 "
                 f"-c idle_in_transaction_session_timeout={TIMEOUT_MS + 10000} -c TimeZone={TZ}"
             ),
@@ -348,6 +358,30 @@ def _execute(conn: psycopg.Connection, sql: str, params: Any, limit: int) -> tup
             rows.append(row)
         columns = [c.name for c in cur.description] if cur.description else []
     return columns, rows, truncated
+
+
+_CACHE: dict[tuple[str, str, int], tuple[float, dict[str, Any]]] = {}
+_CACHE_LOCK = threading.Lock()
+_CACHE_MAX = 64
+
+
+def _run_c(sql: str, params: Any = None, max_rows: int | None = None) -> dict[str, Any]:
+    """Like _run, but identical statistics queries are answered from memory for CACHE_S seconds."""
+    if CACHE_S <= 0:
+        return _run(sql, params, max_rows)
+    key = (sql, repr(params), int(max_rows or 0))
+    now = time.monotonic()
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+        if hit and hit[0] > now:
+            return copy.deepcopy(hit[1])
+    result = _run(sql, params, max_rows)
+    with _CACHE_LOCK:
+        if len(_CACHE) >= _CACHE_MAX:
+            for k in [k for k, v in _CACHE.items() if v[0] <= now] or [next(iter(_CACHE))]:
+                _CACHE.pop(k, None)
+        _CACHE[key] = (now + CACHE_S, copy.deepcopy(result))
+    return result
 
 
 def _run(sql: str, params: Any = None, max_rows: int | None = None) -> dict[str, Any]:
@@ -556,7 +590,7 @@ def statistics(
     """
     table = "statistics_short_term" if period == "5minute" else "statistics"
     start_ts, end_ts = _window(None, start, end)
-    return _run(
+    return _run_c(
         f"""
         SELECT to_timestamp(st.start_ts) AS start, st.mean, st.min, st.max, st.state, st.sum,
                m.unit_of_measurement AS unit
@@ -573,7 +607,7 @@ def statistics(
 
 
 def _meta(statistic_id: str) -> dict[str, Any] | None:
-    res = _run(
+    res = _run_c(
         "SELECT name, unit_of_measurement, has_sum, has_mean, source FROM statistics_meta WHERE statistic_id = %s",
         (statistic_id,),
     )
@@ -601,7 +635,7 @@ def _daily_rows(statistic_id: str, start_ts: float | None, end_ts: float | None,
         # Fetch one extra day at the start so the first requested day gets a value; days after a gap
         # (no data the day before) get null instead of the whole multi-day increase.
         first = start_ts - 90000 if start_ts is not None else None
-        res = _run(
+        res = _run_c(
             f"""
             WITH d AS (
               SELECT (to_timestamp(s.start_ts) AT TIME ZONE %s)::date AS day,
@@ -628,7 +662,7 @@ def _daily_rows(statistic_id: str, start_ts: float | None, end_ts: float | None,
         "max": "max(s.max)::float8",
         "last": "(array_agg(s.mean ORDER BY s.start_ts DESC) FILTER (WHERE s.mean IS NOT NULL))[1]::float8",
     }[agg]
-    res = _run(
+    res = _run_c(
         f"""
         SELECT (to_timestamp(s.start_ts) AT TIME ZONE %s)::date::text AS day, {expr} AS value
         FROM statistics s JOIN statistics_meta m ON m.id = s.metadata_id
@@ -649,7 +683,7 @@ def find_series(pattern: str = "", limit: Annotated[int, Field(ge=1, le=1000)] =
     and the number of hourly statistic points. Use this first when the sensor id is unknown.
     """
     like = _like(pattern)
-    return _run(
+    return _run_c(
         """
         WITH sm AS (
           SELECT id AS mid, statistic_id AS id, name, source, unit_of_measurement AS unit
@@ -767,7 +801,7 @@ def gaps(statistic_id: str, days: Days = 60, resolution: Literal["auto", "hour",
     if meta is None:
         return {"error": f"No statistics for '{statistic_id}'. Use find_series to look it up."}
     start_ts, _ = _window(days, None, None)
-    base = _run(
+    base = _run_c(
         """
         WITH x AS (
           SELECT s.start_ts, s.start_ts - lag(s.start_ts) OVER (ORDER BY s.start_ts) AS spacing
@@ -828,7 +862,7 @@ def gaps(statistic_id: str, days: Days = 60, resolution: Literal["auto", "hour",
             FROM miss GROUP BY grp ORDER BY min(ts)
         """
         params = (statistic_id, start_ts, start_ts, start_ts, TZ, TZ)
-    res = _run(sql, params)
+    res = _run_c(sql, params)
     return {
         "statistic_id": statistic_id,
         "name": meta["name"],
@@ -883,7 +917,7 @@ def summary(statistic_id: str, days: Days = 14) -> dict[str, Any]:
         return out
     cur_vals = [v for _, v in cur_valid]
     if agg == "mean":
-        lo, hi = _run(
+        lo, hi = _run_c(
             """
             SELECT min(s.min)::float8, max(s.max)::float8
             FROM statistics s JOIN statistics_meta m ON m.id = s.metadata_id

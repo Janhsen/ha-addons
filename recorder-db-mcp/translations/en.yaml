@@ -26,5 +26,8 @@ configuration:
   keep_connection_s:
     name: Keep connection open (seconds)
     description: How long a database connection stays open after a query so follow-up queries are faster. 0 = off.
+  cache_s:
+    name: Cache for statistics queries (seconds)
+    description: Identical queries of the statistics tools are answered from memory for this long. 0 = off; latest and run_query are always live.
 network:
   8099/tcp: MCP endpoint (streamable HTTP under a secret path)

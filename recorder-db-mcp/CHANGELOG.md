@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- Schneller: Gleiche Abfragen der Statistik-Werkzeuge (`daily`, `compare`, `summary`, `gaps`, `find_series`, `statistics`) werden 45 s aus dem Speicher beantwortet (Option „Zwischenspeicher“, 0 = aus). `latest` und `run_query` bleiben immer live.
+- Schneller: bis zu vier gleichzeitige Abfragen (vorher zwei); der JIT-Compiler von PostgreSQL ist für die Sitzung aus, das spart bei kurzen Abfragen Kompilierzeit.
+- Der Assistent bekommt Hinweise, welches Werkzeug für welche Frage am schnellsten ist.
+
 ## 0.5.0
 
 - Schneller: Die Datenbankverbindung bleibt nach einer Abfrage kurz offen (Option „Verbindung offen halten“, Standard 60 s, 0 = aus) und wird für Folgeabfragen wiederverwendet. Auf dem Testsystem sinkt der Overhead je Abfrage von 4,5 auf 0,7 ms.

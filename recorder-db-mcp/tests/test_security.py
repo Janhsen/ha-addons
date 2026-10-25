@@ -150,3 +150,36 @@ def test_idle_connection_expires(db, monkeypatch):
     time.sleep(1.3)
     assert db._run("select pg_backend_pid()")["rows"][0][0] != pid1
     _pool_clear(db)
+
+
+def test_jit_off_and_four_slots(db):
+    assert db._run("show jit")["rows"][0][0] == "off"
+    assert db.MAX_PARALLEL == 4
+
+
+def test_statistics_cache(db, monkeypatch):
+    monkeypatch.setattr(db, "CACHE_S", 30)
+    db._CACHE.clear()
+    calls = []
+    real = db._run
+    monkeypatch.setattr(db, "_run", lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    first = db._run_c("select 1 as x")
+    first["rows"].append("mutated")  # callers must not be able to poison the cache
+    second = db._run_c("select 1 as x")
+    assert len(calls) == 1 and second["rows"] == [[1]]
+    monkeypatch.setattr(db, "CACHE_S", 0)
+    db._run_c("select 1 as x")
+    assert len(calls) == 2
+
+
+def test_cache_expires(db, monkeypatch):
+    monkeypatch.setattr(db, "CACHE_S", 1)
+    db._CACHE.clear()
+    calls = []
+    real = db._run
+    monkeypatch.setattr(db, "_run", lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    db._run_c("select 2")
+    import time
+    time.sleep(1.2)
+    db._run_c("select 2")
+    assert len(calls) == 2

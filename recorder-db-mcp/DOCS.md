@@ -14,7 +14,7 @@ Schutzschichten, von außen nach innen:
    veröffentlichen und dort nur `/<geheim>/*` durchlassen.
 2. **Ein Statement pro Abfrage**: Der Server lehnt mehrere Statements in einer Abfrage ab, damit weder
    `COMMIT` noch `SET` die Schreibsperre oder das Zeitlimit aushebeln können.
-3. **Read-only-Transaktion, Zeitlimit, Zeilen- und Größenlimit** (Ergebnis höchstens ca. 2 MB), höchstens zwei
+3. **Read-only-Transaktion, Zeitlimit, Zeilen- und Größenlimit** (Ergebnis höchstens ca. 2 MB), höchstens vier
    gleichzeitige Datenbankabfragen.
    Die Verbindung bleibt nach einer Abfrage kurz offen (Option „Verbindung offen halten“, 0 = aus) und wird
    nach jeder Nutzung zurückgesetzt (Rollback, `DISCARD ALL`); nach Fehlern wird sie geschlossen.
