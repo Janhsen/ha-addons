@@ -228,7 +228,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .sx2 p{margin:8px 0 0;font-size:13px}
 .sx2 .srow{grid-template-columns:auto minmax(40px,1fr) auto;gap:10px;font-size:15px;min-width:0}
 .ovl{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text2);margin-top:6px}
-.swin2{margin:12px 0 4px;min-height:44px;border-radius:10px}.swin2:focus-visible{outline:2px solid var(--p1);outline-offset:2px}.swin2 svg{width:100%;height:auto;display:block}.swin2 text{fill:var(--text2);font:11px -apple-system,system-ui,sans-serif}.swin2 .g{stroke:var(--grid);stroke-width:1}.swin2 .sout{fill:var(--text);font-weight:400}.swin2 .sin{fill:var(--surface);font-weight:600}.swin2 .sdur{font-size:12px}
+.swin2{margin:12px 0 4px;min-height:44px;border-radius:10px}.swin2:focus-visible{outline:2px solid var(--p1);outline-offset:2px}.swin2 svg{width:100%;max-width:440px;height:auto;display:block}.swin2 text{fill:var(--text2);font:11px -apple-system,system-ui,sans-serif}.swin2 .g{stroke:var(--grid);stroke-width:1}.swin2 .sout{fill:var(--text);font-weight:400}.swin2 .sin{fill:var(--surface);font-weight:600}.swin2 .sdur{font-size:12px}
 .wkb{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:92px;margin:8px 0 4px}
 .wkb div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;height:100%;font-size:11px;color:var(--text2)}
 .wkb i{display:block;width:100%;max-width:26px;border-radius:5px;background:var(--c-act);min-height:2px}
@@ -942,19 +942,17 @@ function sleeptHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleept,d=DAILY[w][di
  const inbed=(x.wake-x.bed)/6e4;if(!(inbed>0))return'';const sl=ok(d.slp)&&d.slp>0?d.slp:null,H=36e5;
  /* Garmins Empfehlung gilt für die kommende Nacht: gleiche Uhrzeiten, einen Tag früher auf derselben Achse */
  const r0=T.bedrec,back=ms=>{const q=new Date(ms);q.setDate(q.getDate()-1);return q.getTime()},rec0=r0&&ok(r0.bed)&&ok(r0.wake)&&r0.wake>r0.bed?{bed:back(r0.bed),wake:back(r0.wake)}:null;
- /* Achse eng am Schlaf: volle Stunde vor Bett bis volle Stunde nach Aufstehen; die Empfehlung nur, wenn sie höchstens eine Stunde darüber hinausgeht (dann wird die Achse erweitert), sonst weggelassen */
- let t0=Math.floor(x.bed/H)*H,t1=Math.ceil(x.wake/H)*H;const rec=rec0&&rec0.bed>=t0-H&&rec0.wake<=t1+H?rec0:null;if(rec){t0=Math.min(t0,Math.floor(rec.bed/H)*H);t1=Math.max(t1,Math.ceil(rec.wake/H)*H)}const nH=Math.round((t1-t0)/H);
- const W=360,ml=8,mr=30,pw=W-ml-mr,X=ms=>ml+(ms-t0)/(t1-t0)*pw,y1=6,hb=20,y2=y1+hb+10,hr=16,hp=y1+hb+(rec?4:0),Ht=hp+22,step=nH>9?2:1;
- let g='';for(let i=0;i<=nH;i+=1){const ms=t0+i*H;g+=`<line class="g" x1="${X(ms)}" x2="${X(ms)}" y1="0" y2="${hp+4}"/>`;if(i%step===0)g+=`<text x="${X(ms)}" y="${Ht-6}" text-anchor="middle">${String(new Date(ms).getHours()).padStart(2,'0')}</text>`}
- g+=`<text x="${W}" y="${Ht-6}" text-anchor="end">Uhr</text>`;
- const xb=X(x.bed),xw=X(x.wake),rr=hb/2;
+ /* Achse eng am Schlaf: volle Stunde vor Bett bis volle Stunde nach Aufstehen; die Empfehlung nur, wenn sie höchstens drei Stunden darüber hinausgeht (dann wird die Achse erweitert), sonst weggelassen */
+ let t0=Math.floor(x.bed/H)*H,t1=Math.ceil(x.wake/H)*H;const rec=rec0&&rec0.bed>=t0-3*H&&rec0.wake<=t1+3*H?rec0:null;if(rec){t0=Math.min(t0,Math.floor(rec.bed/H)*H);t1=Math.max(t1,Math.ceil(rec.wake/H)*H)}const nH=Math.round((t1-t0)/H);
+ const W=360,ml=8,mr=14,pw=W-ml-mr,X=ms=>ml+(ms-t0)/(t1-t0)*pw,hb=10,yt=12,y1=yt+10,hp=y1+hb+(rec?4:0),Ht=hp+(rec?34:22),step=nH>8?2:1;
+ const HM=ms=>{const q=new Date(ms);return String(q.getHours()).padStart(2,'0')+':'+String(q.getMinutes()).padStart(2,'0')};
+ let g='';for(let i=0;i<=nH;i+=1){const ms=t0+i*H;g+=`<line class="g" x1="${X(ms)}" x2="${X(ms)}" y1="${y1-6}" y2="${hp+4}"/>`;if(i%step===0)g+=`<text x="${Math.max(ml+10,Math.min(W-mr-10,X(ms)))}" y="${hp+16}" text-anchor="middle">${HM(ms)}</text>`}
+ const xb=X(x.bed),xw=X(x.wake),rr=hb/2,mx=(xb+xw)/2;
  g+=`<rect class="wbar" x="${xb}" y="${y1}" width="${xw-xb}" height="${hb}" rx="${rr}" style="fill:color-mix(in srgb,var(--c-sleep) 78%,transparent)"/>`;
- const inL=xb-ml<44,inR=(W-mr)-xw<44;
- g+=inL?`<text class="sin" x="${xb+rr}" y="${y1+hb/2+4}" text-anchor="start">${clk(x.bed)}</text>`:`<text class="sout" x="${xb-6}" y="${y1+hb/2+4}" text-anchor="end">${clk(x.bed)}</text>`;
- g+=inR?`<text class="sin" x="${xw-rr}" y="${y1+hb/2+4}" text-anchor="end">${clk(x.wake)}</text>`:`<text class="sout" x="${xw+6}" y="${y1+hb/2+4}" text-anchor="start">${clk(x.wake)}</text>`;
- if(xw-xb>=(inL?64:0)+(inR?64:0)+96)g+=`<text class="sin sdur" x="${(xb+xw)/2}" y="${y1+hb/2+4}" text-anchor="middle">${hmm(inbed)}</text>`;
+ g+=`<text class="sout" x="${xb}" y="${yt}" text-anchor="start">${clk(x.bed)}</text><text class="sout" x="${xw}" y="${yt}" text-anchor="end">${clk(x.wake)}</text>`;
+ if(xw-xb>=150)g+=`<text class="sout sdur" x="${mx}" y="${yt}" text-anchor="middle">${hmm(inbed)}</text>`;
  if(rec){const rb=X(rec.bed),rw=X(rec.wake),ry=y1-3,rh=hb+6;g+=`<rect class="srec" x="${rb}" y="${ry}" width="${rw-rb}" height="${rh}" rx="${rh/2}" style="fill:none;stroke:var(--c-sleep);stroke-width:1;stroke-dasharray:3 3"/>`;
-  g+=`<text x="${ml}" y="${hp+14}" text-anchor="start">Gestrichelt: Empfehlung Garmin ${clk(r0.bed)}–${clk(r0.wake)}</text>`}
+  g+=`<text x="${ml}" y="${Ht-4}" text-anchor="start">Gestrichelt: Empfehlung Garmin ${clk(r0.bed)}–${clk(r0.wake)}</text>`}
  const al=`Ins Bett ${clk(x.bed)}, aufgestanden ${clk(x.wake)}, ${hmm(inbed)} im Bett${sl!=null?', '+hmm(sl)+' geschlafen':''}${rec?'. Empfehlung von Garmin: '+clk(r0.bed)+' bis '+clk(r0.wake):''}`;
  return`<div class="sx2"><b>Schlafzeiten</b><div class="kv kvt" style="margin-top:8px"><div><b>${clk(x.bed)}</b><span>Ins Bett</span></div><div><b>${clk(x.wake)}</b><span>Aufgestanden</span></div>${sl!=null?`<div><b>${hmm(sl)}</b><span>Geschlafen</span></div>`:''}</div>
  <div class="swin2" tabindex="0" role="img" aria-label="${esc(al)}"><svg viewBox="0 0 ${W} ${Ht}">${g}</svg></div>${exNote()}</div>`}
