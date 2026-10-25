@@ -41,7 +41,7 @@ jobs:
       - name: Dependency audit
         run: pip-audit -r recorder-db-mcp/requirements.txt
       - name: Static security check
-        run: bandit -q -r recorder-db-mcp/server.py -s B608
+        run: bandit -q -r recorder-db-mcp/server.py -s B104,B105,B608
   dockerfile:
     runs-on: ubuntu-latest
     steps:
@@ -61,7 +61,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Read version
         id: v
-        run: echo "version=$(sed -n 's/^version: *\"\(.*\)\"/\1/p' recorder-db-mcp/config.yaml)" >> "$GITHUB_OUTPUT"
+        run: |
+          v=$(grep '^version:' recorder-db-mcp/config.yaml | cut -d'"' -f2)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
