@@ -1,0 +1,17 @@
+configuration:
+  secrets_key:
+    name: Schlüssel in secrets.yaml
+    description: >-
+      Name des Eintrags in secrets.yaml mit der Verbindungs-URL einer nur-lesenden
+      PostgreSQL-Rolle, z. B. postgresql://leser:passwort@77b2833f-timescaledb/homeassistant
+  max_rows:
+    name: Maximale Zeilen
+    description: Obergrenze für die Zeilen pro Abfrage.
+  statement_timeout_s:
+    name: Zeitlimit pro Abfrage (Sekunden)
+    description: Längere Abfragen werden abgebrochen.
+  log_level:
+    name: Log-Level
+    description: Ausführlichkeit des App-Protokolls.
+network:
+  8099/tcp: MCP-Endpunkt (Streamable HTTP unter geheimem Pfad)

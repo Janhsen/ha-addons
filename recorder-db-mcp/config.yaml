@@ -1,0 +1,28 @@
+name: Recorder DB MCP
+version: "0.1.0"
+slug: recorder-db-mcp
+description: Read-only MCP server for the Home Assistant recorder database (PostgreSQL)
+url: https://github.com/Janhsen/ha-addons/tree/main/recorder-db-mcp
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+map:
+  - type: homeassistant_config
+    read_only: true
+ports:
+  8099/tcp: 9584
+ports_description:
+  8099/tcp: MCP endpoint (streamable HTTP, secret path)
+watchdog: tcp://[HOST]:[PORT:8099]
+options:
+  secrets_key: recorder_readonly_db_url
+  max_rows: 5000
+  statement_timeout_s: 30
+  log_level: info
+schema:
+  secrets_key: str
+  max_rows: int(1,50000)
+  statement_timeout_s: int(1,600)
+  log_level: list(debug|info|warning|error)

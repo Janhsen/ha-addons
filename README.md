@@ -12,6 +12,7 @@ https://github.com/Janhsen/ha-addons
 ## Add-ons
 
 - **Garmin inReach Relay** (`garmin-relay`): receive and send Garmin Messenger (inReach) messages in Home Assistant.
+- **Recorder DB MCP** (`recorder-db-mcp`): read-only MCP server for the recorder database (PostgreSQL). Built locally by Home Assistant from the files in `recorder-db-mcp/`.
 
 This repository only holds the add-on metadata (`config.yaml`, icons, documentation). Home Assistant
 downloads the prebuilt image from the GitHub Container Registry. The files under `garmin-relay/` are
