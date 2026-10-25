@@ -1377,7 +1377,7 @@ function rangeCard(){const box=$('#rcard');if(!box)return;const r=S.rng||(S.rng=
  show()}
 function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week'?7:S.span==='month'?30:90,from=Math.max(0,ND-n+1),idx=[];for(let i=from;i<=ND;i++)idx.push(i);
  const has=d=>ok(d.bed)&&ok(d.wake),rowOf=(w,i)=>DAILY[w][i],vals=ps.flatMap(w=>idx.map(i=>rowOf(w,i)).filter(has));
- const head=`<h2 class="h2">Schlafzeiten</h2><div class="muted sm" style="margin:-6px 0 10px">Ins Bett bis aufgestanden, je Nacht (${n} Tage), darunter Schlafdauer und Schlafwert. Nächte ohne Wert bleiben leer. Tippe auf eine Nacht oder wähle sie mit den Pfeiltasten.</div>`;
+ const head=`<h2 class="h2">Schlafzeiten</h2><div class="muted sm" style="margin:-6px 0 10px">Schlafphasen je Nacht von Bett bis Aufstehen (${n} Tage), dazu der Schlafwert als Linie (rechte Achse). Garmin liefert nur die Summen der Phasen, ihre Reihenfolge in der Nacht ist hier nicht echt. Nächte ohne Wert bleiben leer. Tippe auf eine Nacht oder wähle sie mit den Pfeiltasten.</div>`;
  if(!vals.length){box.innerHTML=head+'<div class="muted">Noch keine Schlafzeiten im Verlauf.</div>';return}
  /* Garmins Empfehlung gilt nur für die kommende Nacht und erscheint nur, wenn Garmin sie liefert (nichts wird selbst berechnet) */
  const nextMid=new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()+1).getTime(),
@@ -1386,35 +1386,35 @@ function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week
  /* Auswahl: letzte Nacht mit Wert, sonst die vom Nutzer gewählte (Nacht-Index oder 'rec') */
  const lastI=Math.max(...ps.flatMap(w=>idx.filter(i=>has(rowOf(w,i)))));
  let sel=S.bedSel;if(!(sel==='rec'&&anyRec)&&!(Number.isInteger(sel)&&sel>=from&&sel<=ND))sel=lastI;
- const lo=Math.floor(Math.min(...vals.map(d=>d.bed),...rec.filter(Boolean).map(r=>r.bed),0)/120)*120-120,hi=Math.ceil(Math.max(...vals.map(d=>d.wake),...rec.filter(Boolean).map(r=>r.wake))/120)*120+90;
- const W=Math.max(300,box.clientWidth-32||600),m={l:34,r:46,t:10,b:22},w=W-m.l-m.r,h1=170,gap=26,h2=84,y2=m.t+h1+gap,H=y2+h2+m.b,colw=w/ns;
- const Y=v=>m.t+(v-lo)/(hi-lo)*h1,X=k=>m.l+(k+.5)/ns*w,bw=Math.max(3,Math.min(14,colw*(ps.length>1?.3:.5))),offOf=pi=>ps.length>1?(pi?bw/2+1:-bw/2-1):0;
- const slp=ps.flatMap(w=>idx.map(i=>rowOf(w,i).slp).filter(ok)),hmax=Math.max(9,Math.ceil(Math.max(0,...slp)/60)),Y2=min=>y2+h2-(min/60)/hmax*h2,Y3=v=>y2+h2-Math.max(0,Math.min(100,v))/100*h2;
+ const dTot=d=>(ok(d.deep)||ok(d.rem)||ok(d.light)||ok(d.awake))?[d.deep,d.rem,d.light,d.awake].reduce((a,b)=>a+(ok(b)?b:0),0):(ok(d.slp)&&d.slp>0?d.slp:0),
+  lo=Math.floor(Math.min(...vals.map(d=>d.bed),...rec.filter(Boolean).map(r=>r.bed),0)/120)*120-60,hi=Math.ceil(Math.max(...vals.map(d=>d.wake),...rec.filter(Boolean).map(r=>r.wake))/120)*120+60;
+ const W=Math.max(300,box.clientWidth-32||600),m={l:42,r:36,t:16,b:22},w=W-m.l-m.r,h1=200,H=m.t+h1+m.b,colw=w/ns;
+ const Y=v=>m.t+(v-lo)/(hi-lo)*h1,X=k=>m.l+(k+.5)/ns*w,bw=Math.max(4,Math.min(22,colw*(ps.length>1?.36:.62))),offOf=pi=>ps.length>1?(pi?bw/2+1:-bw/2-1):0;
+ const Y3=v=>m.t+h1-(Math.max(50,Math.min(100,v))-50)/50*h1;
  const kOf=i=>i===undefined?-1:i-from,selK=sel==='rec'?idx.length:kOf(sel);
- let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Schlafzeiten je Nacht (ins Bett bis aufgestanden) und darunter Schlafdauer und Schlafwert">`;
+ let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Schlafphasen je Nacht (Tief, REM, Leicht, Wach) und der Schlafwert als Linie">`;
  /* Wochenenden (Aufstehtag Samstag oder Sonntag) und gewählte Nacht */
- idx.forEach((i,k)=>{const dw=dAt(i).getDay();if(dw===0||dw===6)g+=`<rect class="bwe" x="${m.l+k*colw}" y="${m.t}" width="${colw}" height="${y2+h2-m.t}" style="fill:var(--text);opacity:.05"/>`});
- if(selK>=0)g+=`<rect class="bsel" x="${m.l+selK*colw}" y="${m.t}" width="${colw}" height="${y2+h2-m.t}" rx="4" style="fill:var(--surface2)"/>`;
- for(let t=Math.ceil(lo/120)*120;t<=hi;t+=120){const hh=((t%1440)+1440)%1440/60;g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${m.l-6}" y="${Y(t)+4}" text-anchor="end">${String(hh).padStart(2,'0')}</text>`}
- /* Mittellinien: Durchschnitt von Bett und Aufstehen je Person */
- ps.forEach((pw,pi)=>{const r=idx.map(i=>rowOf(pw,i)).filter(has);if(!r.length)return;const ab=r.reduce((s,d)=>s+d.bed,0)/r.length,aw=r.reduce((s,d)=>s+d.wake,0)/r.length;
-  for(const[v,t]of[[ab,'Bett'],[aw,'Aufstehen']]){g+=`<line class="bavg" x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:var(${PERS[pw].c});stroke-width:1;stroke-dasharray:2 4;opacity:.5"/>`;
-   if(ps.length===1)g+=`<text x="${W-m.r+4}" y="${Y(v)+4}" style="fill:var(${PERS[pw].c});font-weight:400">Ø ${fm(v)}</text>`}});
- /* Balken je Nacht, letzte Nacht kräftiger, Dauer darunter wenn Platz ist */
+ idx.forEach((i,k)=>{const dw=dAt(i).getDay();if(dw===0||dw===6)g+=`<rect class="bwe" x="${m.l+k*colw}" y="${m.t}" width="${colw}" height="${h1}" style="fill:var(--text);opacity:.05"/>`});
+ if(selK>=0)g+=`<rect class="bsel" x="${m.l+selK*colw}" y="${m.t}" width="${colw}" height="${h1}" rx="4" style="fill:var(--surface2)"/>`;
+ for(let t=Math.ceil(lo/120)*120;t<=hi;t+=120){const hh=((t%1440)+1440)%1440/60;g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${m.l-6}" y="${Y(t)+4}" text-anchor="end">${String(hh).padStart(2,'0')}:00</text>`}
+ /* Schlafwert-Stufen von Garmin: ab 80 gut, ab 90 sehr gut (gestrichelt, rechte Achse) */
+ for(const t of[80,90])g+=`<line class="bgood" x1="${m.l}" x2="${W-m.r}" y1="${Y3(t)}" y2="${Y3(t)}" style="stroke:var(--text2);stroke-width:1;stroke-dasharray:4 4;opacity:.7"/>`;
+ const PAIR=ps.length>1,SC=[0,1,2,3].map(n=>pc=>PAIR?[`var(${pc})`,`color-mix(in srgb,var(${pc}) 62%,transparent)`,`color-mix(in srgb,var(${pc}) 32%,transparent)`,'var(--sep)'][n]:['var(--c-sleep)',`color-mix(in srgb,var(--c-sleep) 62%,transparent)`,`color-mix(in srgb,var(--c-sleep) 32%,transparent)`,'var(--sep)'][n]);
+  /* Balken je Nacht: Schlafphasen gestapelt (Tief unten, dann REM, Leicht, Wach), letzte Nacht kräftiger, Schlafdauer darüber wenn Platz ist */
  const lab=colw>=(ps.length>1?58:34);
- ps.forEach((pw,pi)=>{const last=Math.max(...idx.filter(i=>has(rowOf(pw,i))),-1);idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!has(d))return;const x=X(k)+offOf(pi)-bw/2,y=Y(d.bed),ht=Math.max(2,Y(d.wake)-y);
-  g+=`<rect class="bbar${i===last?' blast':''}" data-i="${i}" x="${x}" y="${y}" width="${bw}" height="${ht}" rx="${Math.min(5,bw/2)}" style="fill:var(${PERS[pw].c});opacity:${i===last?1:.55}"/>`;
-  if(lab)g+=`<text class="bdur" x="${X(k)+offOf(pi)}" y="${y+ht+12}" text-anchor="middle">${hc(d.wake-d.bed)}</text>`})});
- /* Empfehlung für die kommende Nacht: gestrichelter Rahmen */
+ ps.forEach((pw,pi)=>{const last=Math.max(...idx.filter(i=>has(rowOf(pw,i))&&dTot(rowOf(pw,i))>0),-1);idx.forEach((i,k)=>{const d=rowOf(pw,i),tot=dTot(d);if(!(tot>0)||!has(d))return;const x=X(k)+offOf(pi)-bw/2,pc=PERS[pw].c;
+  const parts=(ok(d.deep)||ok(d.rem)||ok(d.light)||ok(d.awake))?[d.deep,d.rem,d.light,d.awake].map(v=>ok(v)?v:0):[0,0,d.slp,0];parts[3]=Math.max(parts[3],d.wake-d.bed-parts[0]-parts[1]-parts[2]);let acc=0,seg='';
+  parts.forEach((v,n)=>{if(!(v>0))return;const y0=Y(d.bed+acc),y1=Y(d.bed+acc+v),r=n===3||(acc+v>=d.wake-d.bed-.01)?Math.min(5,bw/2):0;seg+=`<rect x="${x}" y="${y0}" width="${bw}" height="${Math.max(1,y1-y0-.8)}" rx="${r?Math.min(4,bw/2):0}" style="fill:${SC[n](pc)}"/>`;acc+=v});
+  g+=`<g class="bbar${i===last?' blast':''}" data-i="${i}" style="opacity:${i===last?1:.6}">${seg}</g>`;
+  if(lab&&ok(d.slp)&&d.slp>0)g+=`<text class="bdur" x="${X(k)+offOf(pi)}" y="${Y(d.bed)-5}" text-anchor="middle">${hc(d.slp)}</text>`})});
+ /* Empfehlung für die kommende Nacht: gestrichelter Rahmen in Höhe der empfohlenen Zeit im Bett */
  if(anyRec)ps.forEach((pw,pi)=>{const r=rec[pi];if(!r)return;g+=`<rect class="brec" x="${X(idx.length)+offOf(pi)-bw/2}" y="${Y(r.bed)}" width="${bw}" height="${Math.max(2,Y(r.wake)-Y(r.bed))}" rx="${Math.min(5,bw/2)}" style="fill:none;stroke:var(${PERS[pw].c});stroke-width:1;stroke-dasharray:3 2"/>`});
- /* Zweite Spur: Schlafdauer (Balken) und Schlafwert (Linie), gleiche Nächte */
- g+=`<text x="${m.l}" y="${y2-8}" style="font-weight:600;fill:var(--text)">Schlafdauer und Schlafwert</text>`;
- for(const t of[0,4,8].filter(t=>t<=hmax))g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${Y2(t*60)}" y2="${Y2(t*60)}"/><text x="${m.l-6}" y="${Y2(t*60)+4}" text-anchor="end">${t} h</text>`;
- for(const t of[50,100])g+=`<text x="${W-m.r+4}" y="${Y3(t)+4}">${t}</text>`;
- ps.forEach((pw,pi)=>{idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!ok(d.slp)||d.slp<=0)return;g+=`<rect class="bdd" x="${X(k)+offOf(pi)-bw/2}" y="${Y2(d.slp)}" width="${bw}" height="${Math.max(1,y2+h2-Y2(d.slp))}" rx="${Math.min(3,bw/2)}" style="fill:${mix(PERS[pw].c,30)}"/>`});
-  let seg=[];const flush=()=>{if(seg.length>1)g+=`<polyline class="bsc" points="${seg.join(' ')}" style="fill:none;stroke:var(${PERS[pw].c});stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round"/>`;seg=[]};
+ /* Schlafwert als Linie im selben Plot, rechte Achse 50 bis 100 */
+ for(const t of[50,75,100])g+=`<text x="${W-m.r+6}" y="${Y3(t)+4}" style="fill:var(--text2)">${t}</text>`;
+ ps.forEach((pw,pi)=>{
+  let seg=[];const flush=()=>{if(seg.length>1)g+=`<polyline class="bsc" points="${seg.join(' ')}" style="fill:none;stroke:${PAIR?'var('+PERS[pw].c+')':'var(--text)'};stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round"/>`;seg=[]};
   idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!ok(d.sleep)){flush();return}seg.push((X(k)+offOf(pi)).toFixed(1)+','+Y3(d.sleep).toFixed(1))});flush();
-  idx.forEach((i,k)=>{const d=rowOf(pw,i);if(ok(d.sleep))g+=`<circle class="bsd" cx="${X(k)+offOf(pi)}" cy="${Y3(d.sleep)}" r="${i===sel?4:2.6}" style="fill:var(${PERS[pw].c});stroke:var(--surface);stroke-width:1.4"/>`})});
+  idx.forEach((i,k)=>{const d=rowOf(pw,i);if(ok(d.sleep))g+=`<circle class="bsd" cx="${X(k)+offOf(pi)}" cy="${Y3(d.sleep)}" r="${i===sel?4:2.6}" style="fill:${PAIR?'var('+PERS[pw].c+')':'var(--text)'};stroke:var(--surface);stroke-width:1.4"/>`})});
  const step=Math.ceil(idx.length/6);idx.forEach((i,k)=>{if(k%step===0||k===idx.length-1)g+=`<text x="${X(k)}" y="${H-6}" text-anchor="middle">${dfmt(dAt(i),{day:'numeric',month:'numeric'})}</text>`});
  g+='</svg>';
  /* Details der gewählten Nacht */
@@ -1428,7 +1428,7 @@ function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week
   det=`<div class="bdet" aria-live="polite">${nav('Nacht auf '+esc(dfmt(dt,{weekday:'long',day:'numeric',month:'long'})))}${rows}</div>`}
  const rg=ps.map(pw=>{const r=idx.map(i=>rowOf(pw,i)).filter(has);if(!r.length)return'';const b=r.map(d=>d.bed),a=r.map(d=>d.wake),av=x=>x.reduce((s,y)=>s+y,0)/x.length;
   return`<div class="sm"><b>${ps.length>1?esc(PERS[pw].n)+': ':''}</b>Ins Bett ${fm(Math.min(...b))} bis ${fm(Math.max(...b))}, aufgestanden ${fm(Math.min(...a))} bis ${fm(Math.max(...a))}, Ø ${fm(av(b))} und ${fm(av(a))} <span class="muted">(${r.length} von ${idx.length} Nächten)</span></div>`}).join('');
- const lg=`<div class="lg bleg"><span><i class="bsw" style="border-top:2px dashed var(--text2)"></i>Durchschnitt</span>${anyRec?'<span><i class="bsw" style="border:1.5px dashed var(--text2);height:9px;border-radius:3px"></i>Empfehlung für heute Nacht (Garmin)</span>':''}<span><i class="bsw" style="background:var(--text);opacity:.08;height:9px"></i>Wochenende</span><span><i class="bsw" style="background:var(--text2);height:9px;border-radius:3px"></i>letzte Nacht kräftig</span></div>`;
+ const pc0=PERS[ps[0]].c,lg=`<div class="lg bleg">${[['Tief',0],['REM',1],['Leicht',2],['Wach',3]].map(([n,k])=>`<span><i class="bsw" style="background:${SC[k](pc0)};height:9px;border-radius:3px"></i>${n}</span>`).join('')}<span><i class="bsw" style="border-top:2px dashed var(--text2);opacity:.7"></i>gut ab 80, sehr gut ab 90</span><span><i class="bsw" style="border-top:2px solid var(--text)"></i>Schlafwert</span>${anyRec?'<span><i class="bsw" style="border:1.5px dashed var(--text2);height:9px;border-radius:3px"></i>Empfehlung für heute Nacht (Garmin)</span>':''}<span><i class="bsw" style="background:var(--text);opacity:.08;height:9px"></i>Wochenende</span><span><i class="bsw" style="background:var(--text2);height:9px;border-radius:3px"></i>letzte Nacht kräftig</span></div>`;
  box.innerHTML=head+`<div class="bplot" tabindex="0" role="group" aria-label="Schlafzeiten je Nacht, mit Pfeiltasten eine Nacht wählen">${g}</div>${lg}${det}<div class="rg">${rg}</div>`;
  const pl=box.querySelector('.bplot'),pick=k=>{k=Math.max(0,Math.min(ns-1,k));S.bedSel=k>=idx.length?'rec':idx[k];bedCard(ps);const p2=$('#bcard .bplot');if(p2&&box._kb)p2.focus()},
   at=e=>{const r=pl.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W;return Math.floor((x-m.l)/w*ns)};
