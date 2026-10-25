@@ -42,6 +42,10 @@ Langzeitstatistiken und Ereignisse direkt per SQL abfragen.
 |---|---|
 | `list_tables` | Tabellen mit geschätzter Zeilenzahl und Größe |
 | `describe_table` | Spalten einer Tabelle |
+| `find_series` | Sensoren nach ID oder Anzeigename suchen – mit Quelle, Einheit, erstem/letztem Tag und Punktzahl |
+| `daily` | Ein Wert pro lokalem Tag (Europe/Berlin): `mean`, `min`, `max`, `last` oder `change` (Zähler) |
+| `compare` | Bis zu 8 Sensoren nebeneinander, eine Zeile pro Tag |
+| `gaps` | Fehlende Stunden oder Tage einer Reihe (Auflösung `auto`, `hour` oder `day`) |
 | `find_entities` | Entitäten/Statistiken nach Namensteil suchen |
 | `entity_history` | Zustandsverlauf einer Entität, optional mit Attributen |
 | `statistics` | Langzeit- (`hour`) oder Kurzzeitstatistik (`5minute`) eines Sensors |
