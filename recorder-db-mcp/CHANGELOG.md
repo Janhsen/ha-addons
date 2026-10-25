@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- Schneller: Die Datenbankverbindung bleibt nach einer Abfrage kurz offen (Option „Verbindung offen halten“, Standard 60 s, 0 = aus) und wird für Folgeabfragen wiederverwendet. Auf dem Testsystem sinkt der Overhead je Abfrage von 4,5 auf 0,7 ms.
+- Sicherheit bleibt gleich: Nach jeder Abfrage wird die Sitzung vollständig zurückgesetzt (Rollback, `DISCARD ALL`: Einstellungen, Sperren, temporäre Objekte). Nach einem Fehler oder Abbruch wird die Verbindung geschlossen statt wiederverwendet; höchstens zwei Verbindungen, maximal 10 Minuten alt. Tote Verbindungen werden einmal automatisch ersetzt.
+
 ## 0.4.0 (Sicherheits-Update, empfohlen)
 
 - Sicherheit: `run_query` akzeptiert nur noch ein einzelnes Statement. Vorher konnte eine Mehrfach-Abfrage mit `COMMIT` und `SET` die Read-only-Transaktion und das Zeitlimit aushebeln.

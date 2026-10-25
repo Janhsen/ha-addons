@@ -60,6 +60,7 @@ def load_options() -> dict[str, Any]:
         "rotate_secret": "",
         "hide_404_log": True,
         "audit_log": True,
+        "keep_connection_s": 60,
     }
     if OPTIONS_FILE.exists():
         opts.update(json.loads(OPTIONS_FILE.read_text()))
@@ -123,6 +124,8 @@ DB_URL = load_db_url()
 SECRET, SECRET_NEW = load_secret_path()
 MAX_ROWS = max(1, int(OPTS["max_rows"]))
 TIMEOUT_MS = max(1, int(OPTS["statement_timeout_s"])) * 1000
+KEEP_S = max(0, int(OPTS.get("keep_connection_s", 60)))  # idle time a connection stays open (0 = off)
+MAX_AGE_S = 600  # a reused connection is replaced after this age
 try:
     _DB_PASSWORD = psycopg.conninfo.conninfo_to_dict(DB_URL).get("password") or ""
 except Exception:  # noqa: BLE001
@@ -251,6 +254,100 @@ def _jsonable(value: Any) -> Any:
 
 
 _SLOTS = threading.BoundedSemaphore(MAX_PARALLEL)
+_POOL: list[tuple[psycopg.Connection, float, float]] = []  # (connection, created, last used)
+_POOL_LOCK = threading.Lock()
+
+
+def _connect() -> psycopg.Connection:
+    try:
+        return psycopg.connect(
+            DB_URL,
+            autocommit=False,
+            connect_timeout=10,
+            options=(
+                "-c default_transaction_read_only=on -c client_encoding=UTF8 "
+                f"-c statement_timeout={TIMEOUT_MS} -c lock_timeout=5000 "
+                f"-c idle_in_transaction_session_timeout={TIMEOUT_MS + 10000} -c TimeZone={TZ}"
+            ),
+        )
+    except Exception as err:  # noqa: BLE001
+        log.error("Datenbankverbindung fehlgeschlagen: %s: %s", type(err).__name__, _scrub(str(err)).splitlines()[0])
+        raise UserError("Datenbank nicht erreichbar.") from None
+
+
+def _close(conn: psycopg.Connection) -> None:
+    try:
+        conn.close()
+    except Exception as err:  # noqa: BLE001
+        log.debug("Verbindung schon geschlossen: %s", type(err).__name__)
+
+
+def _borrow() -> tuple[psycopg.Connection, float, bool]:
+    """Return an idle connection that is still fresh and clean, or open a new one."""
+    now = time.monotonic()
+    while True:
+        with _POOL_LOCK:
+            item = _POOL.pop() if _POOL else None
+        if item is None:
+            return _connect(), now, False
+        conn, created, last = item
+        ok = (
+            not conn.closed
+            and now - last <= KEEP_S
+            and now - created <= MAX_AGE_S
+            and conn.info.transaction_status == psycopg.pq.TransactionStatus.IDLE
+        )
+        if ok:
+            return conn, created, True
+        _close(conn)
+
+
+def _give_back(conn: psycopg.Connection, created: float) -> None:
+    """Reset the session (settings, advisory locks, temp objects) and keep the connection for later."""
+    if KEEP_S <= 0:
+        _close(conn)
+        return
+    try:
+        conn.rollback()
+        conn.autocommit = True
+        conn.execute("DISCARD ALL")
+        conn.autocommit = False
+    except Exception:  # noqa: BLE001
+        _close(conn)
+        return
+    with _POOL_LOCK:
+        if len(_POOL) < MAX_PARALLEL:
+            _POOL.append((conn, created, time.monotonic()))
+            return
+    _close(conn)
+
+
+def close_pool() -> None:
+    with _POOL_LOCK:
+        items = list(_POOL)
+        _POOL.clear()
+    for conn, _, _ in items:
+        _close(conn)
+
+
+def _execute(conn: psycopg.Connection, sql: str, params: Any, limit: int) -> tuple[list[str], list[tuple[Any, ...]], bool]:
+    with conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute(f"SET LOCAL statement_timeout = {TIMEOUT_MS}")
+        rows: list[tuple[Any, ...]] = []
+        size = 0
+        truncated = False
+        for row in cur.stream(sql, params or ()):
+            if len(rows) >= limit:
+                truncated = True
+                break
+            size += sum(len(str(v)) for v in row)
+            if size > MAX_BYTES:
+                truncated = True
+                break
+            rows.append(row)
+        columns = [c.name for c in cur.description] if cur.description else []
+    return columns, rows, truncated
 
 
 def _run(sql: str, params: Any = None, max_rows: int | None = None) -> dict[str, Any]:
@@ -258,61 +355,41 @@ def _run(sql: str, params: Any = None, max_rows: int | None = None) -> dict[str,
 
     `cur.stream` uses the extended protocol, which rejects several statements in one string
     (so COMMIT / SET tricks cannot leave the read-only transaction) and fetches row by row
-    (so a huge result never lands in memory).
+    (so a huge result never lands in memory). The connection is kept open for a short time and
+    reset after every use (rollback + DISCARD ALL); after any error it is closed instead.
     """
     limit = max(1, min(int(max_rows or MAX_ROWS), MAX_ROWS))
     if not _SLOTS.acquire(timeout=10):
         raise UserError("Server ausgelastet, bitte gleich noch einmal versuchen.")
     try:
-        try:
-            conn = psycopg.connect(
-                DB_URL,
-                autocommit=False,
-                connect_timeout=10,
-                options=(
-                    "-c default_transaction_read_only=on -c client_encoding=UTF8 "
-                    f"-c statement_timeout={TIMEOUT_MS} -c lock_timeout=5000 "
-                    f"-c idle_in_transaction_session_timeout={TIMEOUT_MS + 10000} -c TimeZone={TZ}"
-                ),
-            )
-        except Exception as err:  # noqa: BLE001
-            log.error("Datenbankverbindung fehlgeschlagen: %s: %s", type(err).__name__, _scrub(str(err)).splitlines()[0])
-            raise UserError("Datenbank nicht erreichbar.") from None
-        watchdog = threading.Timer(TIMEOUT_MS / 1000 + 5, conn.cancel)
-        watchdog.daemon = True
-        watchdog.start()
-        try:
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute("SET TRANSACTION READ ONLY")
-                    cur.execute(f"SET LOCAL statement_timeout = {TIMEOUT_MS}")
-                    rows: list[tuple[Any, ...]] = []
-                    size = 0
-                    truncated = False
-                    for row in cur.stream(sql, params or ()):
-                        if len(rows) >= limit:
-                            truncated = True
-                            break
-                        size += sum(len(str(v)) for v in row)
-                        if size > MAX_BYTES:
-                            truncated = True
-                            break
-                        rows.append(row)
-                    columns = [c.name for c in cur.description] if cur.description else []
-                conn.rollback()
-        except psycopg.errors.QueryCanceled:
-            raise UserError(f"Abfrage nach {TIMEOUT_MS // 1000} s abgebrochen (Zeitlimit).") from None
-        except psycopg.OperationalError as err:
-            log.error("Datenbankfehler: %s", _scrub(str(err)).splitlines()[0])
-            raise UserError("Verbindung zur Datenbank abgebrochen, bitte erneut versuchen.") from None
-        except psycopg.Error as err:
-            message = err.diag.message_primary or type(err).__name__
-            if "multiple commands" in message:
-                message = "Nur ein einzelnes SQL-Statement ist erlaubt."
-            raise UserError(f"SQL-Fehler: {message}") from None
-        finally:
-            watchdog.cancel()
-            conn.close()
+        for attempt in (0, 1):
+            conn, created, reused = _borrow()
+            watchdog = threading.Timer(TIMEOUT_MS / 1000 + 5, conn.cancel)
+            watchdog.daemon = True
+            watchdog.start()
+            healthy = False
+            try:
+                columns, rows, truncated = _execute(conn, sql, params, limit)
+                healthy = True
+                break
+            except psycopg.errors.QueryCanceled:
+                raise UserError(f"Abfrage nach {TIMEOUT_MS // 1000} s abgebrochen (Zeitlimit).") from None
+            except psycopg.OperationalError as err:
+                if reused and attempt == 0:
+                    continue  # the idle connection was dead: retry once on a fresh one (read-only, harmless)
+                log.error("Datenbankfehler: %s", _scrub(str(err)).splitlines()[0])
+                raise UserError("Verbindung zur Datenbank abgebrochen, bitte erneut versuchen.") from None
+            except psycopg.Error as err:
+                message = err.diag.message_primary or type(err).__name__
+                if "multiple commands" in message:
+                    message = "Nur ein einzelnes SQL-Statement ist erlaubt."
+                raise UserError(f"SQL-Fehler: {message}") from None
+            finally:
+                watchdog.cancel()
+                if healthy:
+                    _give_back(conn, created)
+                else:
+                    _close(conn)
     finally:
         _SLOTS.release()
     return {

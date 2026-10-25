@@ -91,3 +91,62 @@ def test_secret_rotation(srv, tmp_path, monkeypatch):
     assert created and second != first
     assert srv.load_secret_path() == (second, False)
     assert not math.isnan(len(second))
+
+
+def _pool_clear(db):
+    db.close_pool()
+
+
+def test_connection_reused(db, monkeypatch):
+    monkeypatch.setattr(db, "KEEP_S", 60)
+    _pool_clear(db)
+    pid1 = db._run("select pg_backend_pid()")["rows"][0][0]
+    pid2 = db._run("select pg_backend_pid()")["rows"][0][0]
+    assert pid1 == pid2
+    _pool_clear(db)
+
+
+def test_pool_off(db, monkeypatch):
+    monkeypatch.setattr(db, "KEEP_S", 0)
+    _pool_clear(db)
+    pid1 = db._run("select pg_backend_pid()")["rows"][0][0]
+    pid2 = db._run("select pg_backend_pid()")["rows"][0][0]
+    assert pid1 != pid2
+
+
+def test_session_state_does_not_leak(db, monkeypatch):
+    monkeypatch.setattr(db, "KEEP_S", 60)
+    _pool_clear(db)
+    db._run("select set_config('statement_timeout','0',false), pg_advisory_lock(4711)")
+    assert db._run("show statement_timeout")["rows"][0][0] != "0"
+    assert db._run("select count(*) from pg_locks where locktype='advisory' and pid=pg_backend_pid()")["rows"][0][0] == 0
+    assert db._run("show default_transaction_read_only")["rows"][0][0] == "on"
+    _pool_clear(db)
+
+
+def test_dead_connection_is_replaced(db, monkeypatch):
+    monkeypatch.setattr(db, "KEEP_S", 60)
+    _pool_clear(db)
+    db._run("select 1")
+    db._POOL[0][0].pgconn.finish()  # simulate a connection killed by the server
+    assert db._run("select 1")["rows"] == [[1]]
+    _pool_clear(db)
+
+
+def test_error_closes_connection(db, monkeypatch):
+    monkeypatch.setattr(db, "KEEP_S", 60)
+    _pool_clear(db)
+    with pytest.raises(db.UserError):
+        db._run("select 1/0")
+    assert db._POOL == []
+    _pool_clear(db)
+
+
+def test_idle_connection_expires(db, monkeypatch):
+    monkeypatch.setattr(db, "KEEP_S", 1)
+    _pool_clear(db)
+    pid1 = db._run("select pg_backend_pid()")["rows"][0][0]
+    import time
+    time.sleep(1.3)
+    assert db._run("select pg_backend_pid()")["rows"][0][0] != pid1
+    _pool_clear(db)

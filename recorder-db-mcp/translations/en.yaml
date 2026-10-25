@@ -23,5 +23,8 @@ configuration:
   audit_log:
     name: Log tool calls
     description: Writes tool name, duration, result and shortened parameters (including SQL) of every call to the log.
+  keep_connection_s:
+    name: Keep connection open (seconds)
+    description: How long a database connection stays open after a query so follow-up queries are faster. 0 = off.
 network:
   8099/tcp: MCP endpoint (streamable HTTP under a secret path)

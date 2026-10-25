@@ -23,5 +23,8 @@ configuration:
   audit_log:
     name: Aufrufe im Protokoll festhalten
     description: Schreibt für jeden Werkzeugaufruf Name, Dauer, Ergebnis und gekürzte Parameter (auch SQL) ins Protokoll.
+  keep_connection_s:
+    name: Verbindung offen halten (Sekunden)
+    description: Wie lange eine Datenbankverbindung nach einer Abfrage offen bleibt, damit Folgeabfragen schneller sind. 0 = aus.
 network:
   8099/tcp: MCP-Endpunkt (Streamable HTTP unter geheimem Pfad)

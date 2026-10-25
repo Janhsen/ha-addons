@@ -16,6 +16,8 @@ Schutzschichten, von außen nach innen:
    `COMMIT` noch `SET` die Schreibsperre oder das Zeitlimit aushebeln können.
 3. **Read-only-Transaktion, Zeitlimit, Zeilen- und Größenlimit** (Ergebnis höchstens ca. 2 MB), höchstens zwei
    gleichzeitige Datenbankabfragen.
+   Die Verbindung bleibt nach einer Abfrage kurz offen (Option „Verbindung offen halten“, 0 = aus) und wird
+   nach jeder Nutzung zurückgesetzt (Rollback, `DISCARD ALL`); nach Fehlern wird sie geschlossen.
 4. **Datenbank-Rolle mit minimalen Rechten**: Das ist die eigentliche Sperre. Die App-Schichten ersetzen
    keine saubere Rolle (siehe Einrichtung).
 5. **Keine Zugriffe auf Home-Assistant-Dateien**: Die Datenbank-URL steht in den App-Optionen (Typ Passwort),
