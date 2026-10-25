@@ -31,7 +31,8 @@ const FIELDS={
  sr:['dauer_ruhestress','last'],sl:['dauer_niedriger_stress','last'],sm:['dauer_mittlerer_stress','last'],sh:['dauer_hoher_stress','last'],
  vo2:['vo2max','last'],kg:['gewicht','last'],
  ready:['trainingsbereitschaft','hist'],
- imm:['intensitatsminuten_moderat','change'],imh:['intensitatsminuten_intensiv','change']};
+ imm:['intensitatsminuten_moderat','change'],imh:['intensitatsminuten_intensiv','change'],
+ bed:['schlafenszeit','ts'],wake:['aufwachzeit','ts']};
 /* ---- Quellenwahl: eigene Integration (sensor.<name>_<x>) vor Garmin Connect (sensor.garmin_<name>_<x>) ----
    PMAP: Connect-Name -> Name bei der eigenen Integration. Was dort fehlt (VO2max, Bereitschaft, Status), kommt immer von Connect.
    Die eigene Integration liefert Zeiten in Sekunden, Connect in Minuten (PSEC): beim Lesen auf Minuten umgerechnet. */
@@ -41,14 +42,14 @@ const PMAP={schritte:'schritte',kalorien:'gesamtkalorien',tagliches_schrittziel:
  dauer_mittlerer_stress:'zeit_mittlerer_stress',dauer_hoher_stress:'zeit_hoher_stress',gewicht:'gewicht',hrv_wochendurchschnitt:'hrv_wochendurchschnitt',
  intensitatsminuten_moderat:'intensitatsminuten_moderat',intensitatsminuten_intensiv:'intensitatsminuten_hoch',
  maximales_stresslevel:'maximaler_stress',inaktive_zeit:'sitzende_zeit',sehr_aktive_zeit:'zeit_hochaktiv',schlafenszeit:'schlafbeginn',aufwachzeit:'schlafende',
- ziel_intensitatsminuten:'intensitatsminuten_ziel',fitnessalter:'fitnessalter',chronologisches_alter:'kalendarisches_alter',laktatschwellen_herzfrequenz:'laktatschwelle_puls',etagen_aufwarts:'stockwerke_hoch',ziel_etagen_aufwarts:'stockwerke_ziel'};
+ ziel_intensitatsminuten:'intensitatsminuten_ziel',fitnessalter:'fitnessalter',chronologisches_alter:'kalendarisches_alter',laktatschwellen_herzfrequenz:'laktatschwelle_puls',etagen_aufwarts:'stockwerke_hoch',ziel_etagen_aufwarts:'stockwerke_ziel',zuletzt_synchronisiert:'letzte_synchronisation',nachster_schlafbedarf:'nachster_schlafbedarf'};
 const PSEC=new Set(['gesamtschlafdauer','tiefschlaf','rem_schlaf','leichtschlaf','wachzeit','dauer_ruhestress','dauer_niedriger_stress','dauer_mittlerer_stress','dauer_hoher_stress','inaktive_zeit','sehr_aktive_zeit']);
 const SRC={mode:'auto',by:{}}; /* by: Feldschlüssel (steps, bb, hrv …) -> auto|personal|connect */
 const MODES=['auto','personal','connect'];
 function setSourceConfig(c){c=c||{};SRC.mode=MODES.includes(c.source)?c.source:'auto';SRC.by={};for(const[k,v]of Object.entries(c.source_by||{}))if(MODES.includes(v))SRC.by[k]=v}
 function sourceMode(key){return(key&&SRC.by[key])||SRC.mode}
 const NAMEKEY={};for(const[k,v]of Object.entries(FIELDS))NAMEKEY[v[0]]=k;NAMEKEY.hrv_wochendurchschnitt='hrv';
-Object.assign(NAMEKEY,{ziel_intensitatsminuten:'imin',maximales_stresslevel:'stress',inaktive_zeit:'stress',sehr_aktive_zeit:'stress',schlafenszeit:'sleep',aufwachzeit:'sleep',fitnessalter:'fitage',chronologisches_alter:'fitage',erreichbares_fitnessalter:'fitage',laktatschwellen_herzfrequenz:'zones',etagen_aufwarts:'floors',ziel_etagen_aufwarts:'floors',hrv_basiswert:'hrv'});
+Object.assign(NAMEKEY,{ziel_intensitatsminuten:'imin',maximales_stresslevel:'stress',inaktive_zeit:'stress',sehr_aktive_zeit:'stress',schlafenszeit:'sleep',aufwachzeit:'sleep',fitnessalter:'fitage',chronologisches_alter:'fitage',erreichbares_fitnessalter:'fitage',laktatschwellen_herzfrequenz:'zones',etagen_aufwarts:'floors',ziel_etagen_aufwarts:'floors',hrv_basiswert:'hrv',optimale_schlafenszeit:'sleep',optimale_aufwachzeit:'sleep',nachster_schlafbedarf:'sleep',zuletzt_synchronisiert:'sync'});
 const connectId=(cu,name)=>'sensor.garmin_'+cu+'_'+name;
 const personalId=(pu,name)=>PMAP[name]&&pu?'sensor.'+pu+'_'+PMAP[name]:null;
 const unitFactor=(unit,name)=>unit==='s'?1/60:unit==='min'?1:unit==='h'?60:(PSEC.has(name)?1/60:1);
@@ -86,6 +87,11 @@ function aggregateStats(rows,kind,tz){ /* rows: [{start(ms),mean|change|state,..
 function lastPerDay(states,tz){ /* history-Zeilen [{s,lu(s)|last_updated}] -> Map dayIdx -> letzter numerischer Zustand */
  const m=new Map();for(const x of states||[]){const t=x.lu!=null?x.lu*1000:Date.parse(x.last_updated||x.lc||'');const s=x.s!=null?x.s:x.state;const v=parseFloat(s);if(!isFinite(v)||!isFinite(t))continue;m.set(dayIndex(t,tz),v)}return m}
 
+/* Zeitstempel-Zustände (Schlafbeginn, Schlafende): je Tag Minuten ab Mitternacht (Ortszeit) des Aufwachtags.
+   Der Tag richtet sich nach dem Wert, nicht nach dem Zeitpunkt der Meldung: Aufwachen gehört zu seinem Tag, Schlafbeginn zu dem Tag, an dem man danach aufsteht (Wert + 6 h). Bett vor Mitternacht = negativ. */
+function tsPerDay(states,tz,kind){const m=new Map();for(const x of states||[]){const s=x.s!=null?x.s:x.state;if(s==null||s===''||s==='unknown'||s==='unavailable')continue;const t=Date.parse(s);if(!isFinite(t))continue;
+ const d=dayIndex(kind==='bed'?t+6*36e5:t,tz),a=Date.parse(dayStartIso(d,tz));m.set(d,(t-a)/6e4)}return m}
+
 /* ---- Aktivitäten ---- */
 function mapActivity(w,a,routes,tz){
  const t=Date.parse(a.startTime),id=String(a.activityId),sport=SPORT[a.activityType]||'other',R=routes&&routes.get(id);
@@ -110,16 +116,16 @@ function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.c
   /* ältester Tag, für den der Recorder Garmin-Daten hat; davor liefert diese Quelle nichts */
   async coverage(){return memo('cov',async()=>{const mode=sourceMode('steps'),ids=mode==='personal'?[PP+'schritte']:mode==='connect'?[P+'schritte']:[PP+'schritte',P+'schritte'];const r=await stats(ids,'day',['state'],'2026-01-01T00:00:00Z',new Date().toISOString());let from=null;for(const id of ids){const rows=r[id]||[];if(rows.length){const d=dayIndex(rows[0].start,tz);if(from==null||d<from)from=d}}return{from}})},
   /* Tageswerte: Array von {day, steps, ...} mit null bei fehlenden Werten */
-  async daily(fromDay,toDay){const a=dayStartIso(fromDay,tz),b=dayStartIso(toDay+1,tz),byKind={change:new Set(),last:new Set(),mean:new Set(),hist:new Set()};
+  async daily(fromDay,toDay){const a=dayStartIso(fromDay,tz),b=dayStartIso(toDay+1,tz),byKind={change:new Set(),last:new Set(),mean:new Set(),hist:new Set(),ts:new Set()};
    /* je Feld die Kandidaten in Auswahlreihenfolge (Quellenwahl): pro Tag gewinnt der erste mit Wert */
-   const cands={};for(const[f,[id,k]]of Object.entries(FIELDS)){const m=sourceMode(f),pn=PMAP[id],c={id:P+id,fac:1},pc=pn&&k!=='hist'?{id:PP+pn,fac:PSEC.has(id)?1/60:1}:null;
+   const cands={};for(const[f,[id,k]]of Object.entries(FIELDS)){const m=sourceMode(f==='bed'||f==='wake'?'sleep':f),pn=PMAP[id],c={id:P+id,fac:1},pc=pn&&k!=='hist'?{id:PP+pn,fac:PSEC.has(id)?1/60:1}:null;
     cands[f]=m==='connect'||!pc?[c]:m==='personal'?[pc]:[pc,c];for(const x of cands[f])byKind[k].add(x.id)}
    const out=new Map();const put=(f,m,fac)=>{for(const[d,v0]of m){if(d<fromDay||d>toDay)continue;const o=out.get(d)||out.set(d,{day:d}).get(d);if(o[f]==null)o[f]=fac===1?v0:v0*fac}};
    const[dayRows,hourRows,hRows]=await Promise.all([
     byKind.change.size?stats([...byKind.change],'day',['change'],a,b):{},
     byKind.last.size||byKind.mean.size?stats([...byKind.last,...byKind.mean],'hour',['mean','state'],a,b):{},
-    byKind.hist.size?hist([...byKind.hist],a,b):{}]);
-   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='hist'?lastPerDay(hRows[x.id],tz):aggregateStats((k==='change'?dayRows:hourRows)[x.id],k,tz),x.fac);
+    byKind.hist.size||byKind.ts.size?hist([...byKind.hist,...byKind.ts],a,b):{}]);
+   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='ts'?tsPerDay(hRows[x.id],tz,f):k==='hist'?lastPerDay(hRows[x.id],tz):aggregateStats((k==='change'?dayRows:hourRows)[x.id],k,tz),x.fac);
    const days=[];for(let d=fromDay;d<=toDay;d++){const o=out.get(d)||{day:d};for(const f of Object.keys(FIELDS))if(o[f]==null)o[f]=null;
     o.light=o.light; days.push(o)}return days},
   /* Aktivitäten, aus Historie der Garmin-Sensoren; Routen verknüpft über aktivitaet_id */
@@ -152,7 +158,7 @@ async function combine(recorder,archive){
   async dayCurve(d,k){return recorder.dayCurve(d,k)},
   async trackDetail(act){if(archive.enabled){try{return await archive.trackDetail(act)}catch(_){}}return null}}}
 
-const api={PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
+const api={tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FitnessData=api;
 })(typeof self!=='undefined'?self:this);
 
@@ -216,6 +222,8 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .srow b{font-weight:600;white-space:nowrap}
 .sbar{position:relative;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}.sbar i{display:block;height:100%;border-radius:3px}
 .sbar u{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--text) 22%,transparent);border-radius:3px}
+.hint{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:var(--surface2);font-size:13px;line-height:1.4}.hint svg.i{width:18px;height:18px;margin-top:1px;color:var(--warn)}.hint b{font-weight:600}
+.bedc svg{width:100%;height:auto;display:block}.bedc text{fill:var(--text2);font:11px -apple-system,system-ui,sans-serif}.bedc .g{stroke:var(--grid);stroke-width:1}.bedc .rg{margin-top:10px}
 .sx2{margin-top:10px;border-top:1px solid var(--sep);padding-top:10px}
 .sx2 p{margin:8px 0 0;font-size:13px}
 .sx2 .srow{grid-template-columns:auto minmax(40px,1fr) auto;gap:10px;font-size:15px;min-width:0}
@@ -555,7 +563,7 @@ const dfmt=(d,o)=>d.toLocaleDateString('de-DE',o);
 const hm=s=>{if(!ok(s))return'–';s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+':'+String(m).padStart(2,'0')+' h':m+' min'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const IC={sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',cmp:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',close:'<path d="M6 6l12 12M18 6L6 18"/>',mtb:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-8h5l3 8M10 8l3 8M9 6h3"/>',run:'<circle cx="14" cy="5" r="2"/><path d="M12 9l-3 3 3 2-2 5M12 9l4 2 3-1M12 14l4 1 1 4"/>',hike:'<path d="M3 19l6-10 4 6 2-3 6 7z"/>',ski:'<path d="M4 17l16-6M6 20l14-5"/><circle cx="9" cy="6" r="2"/><path d="M9 9l3 4"/>',swim:'<path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17M7 12l4-3 3 2"/><circle cx="16" cy="7" r="2"/>',yoga:'<circle cx="12" cy="5" r="2"/><path d="M12 8v5M7 20l5-7 5 7M6 11h12"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bolt:'<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',body:'<circle cx="12" cy="5.5" r="2"/><path d="M6 9h12M12 9v5M9 21l3-7 3 7"/>',calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',map:'<path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2zM9 4v14M15 6v14"/>',chart:'<path d="M5 20V10M12 20V4M19 20v-8"/>',play:'<path d="M8 5l11 7-11 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',send:'<path d="M4 12l16-8-6 16-3-7z"/>'};
+const IC={warn:'<path d="M12 4 3 20h18L12 4z"/><path d="M12 10v4.5M12 17.4v.1"/>',sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',cmp:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',close:'<path d="M6 6l12 12M18 6L6 18"/>',mtb:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-8h5l3 8M10 8l3 8M9 6h3"/>',run:'<circle cx="14" cy="5" r="2"/><path d="M12 9l-3 3 3 2-2 5M12 9l4 2 3-1M12 14l4 1 1 4"/>',hike:'<path d="M3 19l6-10 4 6 2-3 6 7z"/>',ski:'<path d="M4 17l16-6M6 20l14-5"/><circle cx="9" cy="6" r="2"/><path d="M9 9l3 4"/>',swim:'<path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17M7 12l4-3 3 2"/><circle cx="16" cy="7" r="2"/>',yoga:'<circle cx="12" cy="5" r="2"/><path d="M12 8v5M7 20l5-7 5 7M6 11h12"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bolt:'<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',body:'<circle cx="12" cy="5.5" r="2"/><path d="M6 9h12M12 9v5M9 21l3-7 3 7"/>',calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',map:'<path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2zM9 4v14M15 6v14"/>',chart:'<path d="M5 20V10M12 20V4M19 20v-8"/>',play:'<path d="M8 5l11 7-11 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',send:'<path d="M4 12l16-8-6 16-3-7z"/>'};
 const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''}>${IC[n]}</svg>`;
 const SP={mtb:{n:'Mountainbike',k:'Mountainbiken',hr:131,v:15.5,kc:10},run:{n:'Laufen',k:'Laufen',hr:150,v:10.4,kc:13},hike:{n:'Wandern',k:'Wandern',hr:119,v:3.9,kc:7.5},ski:{n:'Snowboard',k:'Snowboarden',hr:122,v:14,kc:8},swim:{n:'Schwimmen',k:'Schwimmen',hr:128,v:1.8,kc:9},yoga:{n:'Yoga',k:'Yoga',hr:82,v:0,kc:3}};
 const PL={stg:{n:'Musterstadt',lat:48.52,lon:9.05,el:360,sp:3.5},dol:{n:'Bergdorf',lat:46.41,lon:11.60,el:1180,sp:3},cam:{n:'Campitello di Fassa',lat:46.47,lon:11.74,el:1450,sp:2},tri:{n:'Triest',lat:45.66,lon:13.78,el:60,sp:2},faa:{n:'Faaker See',lat:46.55,lon:13.93,el:560,sp:1},car:{n:'Carezza',lat:46.40,lon:11.58,el:1700,sp:2}};
@@ -654,13 +662,16 @@ for(const w of['p1','p2']){const r=rng(w==='p1'?5:9),r2=rng(w==='p1'?77:78),T=TO
   const base=w==='p1'?5200:7600,cl=(x,a,b)=>Math.max(a,Math.min(b,x));
   const sleep=Math.round((w==='p1'?84:82)+r()*10),slp=Math.round(T.need+(r()-.35)*80),deep=Math.round(slp*(.12+r()*.06)),rem=Math.round(slp*(.19+r()*.06)),stress=Math.round(14+r()*16+act.dur*4+Math.max(0,(T.need-slp)/5)),prev=i?days[i-1].load:0;
   const o={steps:Math.round(base+(we?1500:0)+dayActs.length*4200+r()*2600),rhr:Math.round((w==='p1'?47:50)+3*Math.sin(i/21)+r()*3),hrv:Math.round((w==='p1'?78:52)+10*Math.sin(i/13)+r()*12),sleep,slp,deep,rem,light:slp-deep-rem,awake:Math.round(4+r()*18),need:T.need,bb:Math.round(cl(48+(sleep-75)*1.8+(slp-T.need)/10+r()*14,30,100)),stress,sr:Math.round(620-stress*8),sl:Math.round(stress*5),sm:Math.round(Math.max(0,(stress-24)*5)),sh:Math.round(Math.max(0,(stress-38)*4)),ready:Math.round(cl(48+(sleep-75)*1.3-prev*.12+r()*14,28,98)),kg:+((w==='p1'?78:61)+Math.sin(i/17)*.5+r()*.3).toFixed(1),vo2:Math.round((w==='p1'?53:54)+Math.sin(i/40)+r()*.8),kcal:Math.round((w==='p1'?2250:1900)+act.dur*620),dist:act.dist,ascent:act.asc,load:act.load,dur:act.dur,imm:i>=ND-9&&i<ND?Math.round(dayActs.length?30+r2()*50:r2()*14):null,imh:i>=ND-9&&i<ND?Math.round(dayActs.length?8+r2()*22:0):null};
+  {const we=[0,6].includes(dAt(i).getDay()),bd=Math.round((w==='p1'?-50:-80)+r()*95+(we?55:0));if(i%9===4){o.bed=null;o.wake=null}else{o.bed=bd;o.wake=bd+slp+o.awake+11}}
   if(i===ND)Object.assign(o,{steps:T.steps,rhr:T.rhr,hrv:T.hrv,sleep:T.sleep,slp:T.slp,deep:T.deep,rem:T.rem,light:T.light,awake:T.awake,bb:T.bb,stress:T.stress,sr:T.sr,sl:T.sl,sm:T.sm,sh:T.sh,ready:T.ready,kcal:T.kcal,kg:w==='p1'?78:61,vo2:T.vo2});
   days.push(o)}
  DAILY[w]=days}
 /* Runde 2, nur Beispieldaten im Mockup (im Live-Betrieb kommen diese Werte aus den Sensoren) */
 {const wake=TODAY.getTime()+(6*60+40)*6e4;
  for(const w of['p1','p2']){const T=TODAYV[w],la=ACTS.find(x=>x.who===w&&x.gps);
-  T.sleept={bed:wake-(T.slp+T.awake+11)*6e4,wake,src:'personal'};
+  T.sleept={bed:wake-(T.slp+T.awake+11)*6e4,wake,src:'personal'};{const d0=DAILY[w][ND];d0.bed=Math.round((T.sleept.bed-TODAY.getTime())/6e4);d0.wake=Math.round((wake-TODAY.getTime())/6e4)}
+  T.bedrec={bed:TODAY.getTime()+(22*60+30)*6e4,wake:TODAY.getTime()+(29*60+30)*6e4,need:T.need};
+  T.sync=w==='p2'?{ageH:21}:null;T.key=w==='p1'?{days:9}:null;
   T.str2={max:w==='p1'?61:48,sit:w==='p1'?204:240,act:w==='p1'?2:9};
   T.hrvband=w==='p1'?{lo:81,hi:102}:{lo:47,hi:66};
   T.age=w==='p1'?{fa:29.1,ca:37,ach:31.5,comp:{bmi:20.9,rhr:46,vd:4,vm:486}}:{fa:33.4,ca:38,ach:null,comp:null};
@@ -863,7 +874,7 @@ function heroHtml(w,di,d,T){const bb=bbNow(w,di),lv=rLevel(w,di),R=44,C=2*Math.P
 function personHeute(w,di){const d=DAILY[w][di],T=TODAYV[w],as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),
  ex=as.length?as:[ACTS.find(a=>a.who===w&&dayOf(a.date)<=di)].filter(Boolean),R=44,C=2*Math.PI*R;
  const open=CARDS.map(c=>c[0]).find(k=>S.card===w+k);
- return`<div class="pstack">${analyseHtml(w,di,`${di===ND?'Stand '+(LIVE?standHM(w):'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}`)}<section class="card">
+ return`<div class="pstack">${hintsHtml(w,di)}${analyseHtml(w,di,`${di===ND?'Stand '+(LIVE?standHM(w):'06:40')+', aus Home Assistant':(LIVE?'Home Assistant':'Beispieldaten')}`)}<section class="card">
  ${hvSwitch()}${heroHtml(w,di,d,T)}
  <div class="cg">${CARDS.map(c=>cardHtml(w,c[0],d)).join('')}</div>
  <h2 class="h2" style="margin-top:18px">${as.length?'Aktivitäten dieses Tages':'Zuletzt'}</h2>
@@ -920,6 +931,14 @@ function sleepxHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleepx;if(!x)return'
 const clk=ms=>new Date(ms).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
 const exNote=()=>isLive()?'':'<div class="muted sm" style="margin-top:6px">Beispieldaten</div>';
 /* Schlafzeiten: ins Bett, aufgestanden, Zeit im Bett gegen Schlafdauer; Fenster von 18 Uhr am Vorabend bis 12 Uhr */
+function hintsHtml(w,di){const T=TODAYV[w];if(di!==ND||!T)return'';const nm=S.who==='both'?PERS[w].n+': ':'',o=[];
+ if(T.sync)o.push(['Die Uhr hat sich '+(ok(T.sync.ageH)?'zuletzt vor '+Math.round(T.sync.ageH)+' h':'länger nicht')+' abgeglichen. Die Werte können älter sein.']);
+ if(T.key)o.push([T.key.days>0?'Der Garmin-Schlüssel läuft in '+T.key.days+(T.key.days===1?' Tag':' Tagen')+' ab. Danach kommen keine Daten mehr, bis ein neuer eingetragen ist.':'Der Garmin-Schlüssel ist abgelaufen. Es kommen keine neuen Daten, bis ein neuer eingetragen ist.']);
+ return o.map(x=>`<div class="hint" role="note">${ic('warn')}<span>${nm?'<b>'+esc(nm.slice(0,-2))+'</b> ':''}${esc(x[0])}</span></div>`).join('')}
+function bedrecHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.bedrec;if(!x)return'';const k=[];
+ if(x.bed!=null&&x.wake!=null)k.push(`<div><b>${clk(x.bed)}</b><span>Ins Bett</span></div><div><b>${clk(x.wake)}</b><span>Aufstehen</span></div>`);
+ if(ok(x.need))k.push(`<div><b>${hmm(x.need)}</b><span>Schlafbedarf</span></div>`);
+ return k.length?`<div class="sx2"><b>Empfehlung für heute Abend</b><div class="kv kvt" style="margin-top:8px">${k.join('')}</div><p class="muted sm">Zeiten und Bedarf von Garmin, nichts selbst gerechnet.</p></div>`:''}
 function sleeptHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleept,d=DAILY[w][di];if(!x)return'';
  const inbed=(x.wake-x.bed)/6e4;if(!(inbed>0))return'';const sl=ok(d.slp)&&d.slp>0?d.slp:null;
  const wd=new Date(x.wake),S0=new Date(wd.getFullYear(),wd.getMonth(),wd.getDate()-1,18).getTime(),E=new Date(wd.getFullYear(),wd.getMonth(),wd.getDate(),12).getTime(),sp=E-S0,pc=ms=>Math.max(0,Math.min(100,(ms-S0)/sp*100));
@@ -989,7 +1008,7 @@ function bbText(w,di){const v=bbNow(w,di),d=DAILY[w][di];return di===ND?`Aktuell
 function actRows(w,di){const as=ACTS.filter(a=>a.who===w&&dayOf(a.date)===di),ex=as.length?as:[ACTS.find(a=>a.who===w&&dayOf(a.date)<=di)].filter(Boolean);
  return`<h2 class="h2" style="margin-top:6px">${as.length?'Aktivitäten dieses Tages':'Zuletzt'}</h2>`+(ex.length?ex.map(a=>`<button class="arow" data-open="${a.id}"><span class="mr">${routeSvg(a)||`<span class="av" style="background:var(${PERS[w].c})">${ic(a.sport,20)}</span>`}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${SP[a.sport].n}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<span class="muted sm">${a.gps?f0(a.st.gain)+' m ↑ · ':''}${hm(a.st.dur)}</span></span>${ic('next',16)}</button>`).join(''):'<div class="muted">Noch keine Aktivität.</div>')}
 function pairHeute(di){const ws=['p1','p2'],D2={p1:DAILY.p1[di],p2:DAILY.p2[di]};
- const head=`<div class="pair phead">${ws.map(w=>`<div class="who" style="margin:0"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>`).join('')}</div>`;
+ const head=ws.map(w=>hintsHtml(w,di)).join('')+`<div class="pair phead">${ws.map(w=>`<div class="who" style="margin:0"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</div>`).join('')}</div>`;
  const cmpRow=(lab,k,f)=>`<div class="pc-l">${lab}</div>${ws.map(w=>{const x=f(w);return x==null?'<div></div>':`<button class="pc-r" data-ins="${k}" data-w="${w}" aria-label="${lab} ${PERS[w].n} ${x.t}"><span class="pc-v"><b>${x.t}</b></span><span class="pc-bar"><i style="width:${ok(x.v)?Math.max(0,Math.min(100,x.v)):0}%;background:var(${PERS[w].c})"></i></span></button>`}).join('')}`;
  const heroes=`<div class="pcmp"><div></div>${ws.map(w=>{const lv=rLevel(w,di);return`<div class="pc-h"><b><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}</b><span class="sm">${lv?'Garmin: '+esc(lv):'&nbsp;'}</span></div>`}).join('')}
   ${cmpRow('Bereitschaft','rdy',w=>({v:D2[w].ready,t:f0(D2[w].ready)}))}
@@ -1064,8 +1083,8 @@ let DAYSRC=null;
 function dayBlock(w,k){const box=$('#dp-'+w);if(!box||k==='body')return;const di=S.day,dl=dfmt(dAt(di),{weekday:'long',day:'numeric',month:'long'}),T={sleep:'Schlafphasen in der Nacht zu '+dl,rec:'Body Battery am '+dl,act:'Schritte am '+dl,str:'Stress am '+dl}[k];
  box.insertAdjacentHTML(k==='act'?'afterbegin':'beforeend',`<div class="dday"><b>${T}</b><div class="chartbox" id="dd-${w}" style="margin-top:8px"></div><div class="muted sm" id="ddn-${w}" style="margin-top:6px"></div></div>`);
  const b=$('#dd-'+w,box),n=$('#ddn-'+w,box),d=DAILY[w][di],now=di===ND;
- if(k==='sleep'&&DAYSRC){const P=sleepParts(d);b.innerHTML=stackBar(P)+legendRow(P,hmm)+sleeptHtml(w,di)+sleepxHtml(w,di);n.textContent='Garmin liefert nur die Summen der Schlafphasen, nicht ihren Verlauf in der Nacht.';return}
- if(k==='sleep'){hypno(b,w,di);b.insertAdjacentHTML('beforeend',sleeptHtml(w,di)+sleepxHtml(w,di));n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.';return}
+ if(k==='sleep'&&DAYSRC){const P=sleepParts(d);b.innerHTML=stackBar(P)+legendRow(P,hmm)+sleeptHtml(w,di)+bedrecHtml(w,di)+sleepxHtml(w,di);n.textContent='Garmin liefert nur die Summen der Schlafphasen, nicht ihren Verlauf in der Nacht.';return}
+ if(k==='sleep'){hypno(b,w,di);b.insertAdjacentHTML('beforeend',sleeptHtml(w,di)+bedrecHtml(w,di)+sleepxHtml(w,di));n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.';return}
  const kind={rec:'bb',act:'steps',str:'stress'}[k];
  const paint=R=>{if(!b.isConnected)return;const c=R?R[kind]:dayCurve(w,di,kind),dense=k==='rec'&&R&&(R.bbd||R.hrd||R.hrvd),has=c&&c.some(x=>x!=null);if(!has&&!dense){const dd=b.closest('.dday');if(dd){const x=k==='str'?stressExtraHtml(w,di):k==='act'?weekGoalHtml(w,di):'';if(x)dd.insertAdjacentHTML('beforebegin',x);dd.remove()}return}
   if(k==='rec'){const bd=R?R.bbd:denseDemo(w,di,'bb'),hd=R?R.hrd:denseDemo(w,di,'hr');
@@ -1346,6 +1365,20 @@ function rangeCard(){const box=$('#rcard');if(!box)return;const r=S.rng||(S.rng=
   if(S.kpi&&S.kpi.startsWith('pair|')&&ps.length>1){const kk=S.kpi.split('|')[1],cb=$('#kc-pair');if(cb){const sum=['dist','ascent','dur','load','steps'].includes(kk),L2=r.b-r.a+1;scrollChart(cb,{mode:sum?'group':'line',n:L2,vis:Math.min(L2,30),h:180,series:ps.map(w=>({n:PERS[w].n,c:`var(${PERS[w].c})`,v:DAILY[w].slice(r.a,r.b+1).map(d=>d[kk])})),labels:i=>dfmt(dAt((r.a+i)),{weekday:'short',day:'numeric',month:'numeric'}),short:i=>dfmt(dAt((r.a+i)),{day:'numeric',month:'numeric'}),tfmt:kk==='slp'?hmm:f1,yfmt:kk==='slp'?(x=>f1(x/60)+' h'):f0,sel:-1,aria:KN2[kk]+', '+PERS.p1.n+' und '+PERS.p2.n})}}
   if(S.kpi){const[kw,kk]=S.kpi.split('|'),cb=$('#kc-'+kw);if(cb&&ps.includes(kw)){const vals=DAILY[kw].slice(r.a,r.b+1).map(d=>d[kk]),sum=['dist','ascent','dur','load','steps'].includes(kk);scrollChart(cb,{mode:sum?'stack':'line',n:vals.length,vis:Math.min(vals.length,45),h:170,series:[{n:KN[kk],c:`var(${PERS[kw].c})`,v:vals}],labels:i=>dfmt(dAt((r.a+i)),{weekday:'short',day:'numeric',month:'numeric'}),short:i=>dfmt(dAt((r.a+i)),{day:'numeric',month:'numeric'}),tfmt:kk==='slp'?hmm:f1,yfmt:kk==='slp'?(x=>f1(x/60)+' h'):f0,sel:-1,aria:KN[kk]})}}};
  show()}
+function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week'?7:S.span==='month'?30:90,from=Math.max(0,ND-n+1),idx=[];for(let i=from;i<=ND;i++)idx.push(i);
+ const vals=ps.flatMap(w=>idx.map(i=>DAILY[w][i]).filter(d=>ok(d.bed)&&ok(d.wake)));
+ const head=`<h2 class="h2">Schlafzeiten</h2><div class="muted sm" style="margin:-6px 0 10px">Ins Bett bis aufgestanden, je Nacht (${S.span==='week'?'7':S.span==='month'?'30':'90'} Tage). Nächte ohne Wert bleiben leer.</div>`;
+ if(!vals.length){box.innerHTML=head+'<div class="muted">Noch keine Schlafzeiten im Verlauf.</div>';return}
+ const W=Math.max(300,box.clientWidth-32||600),H=210,m={l:30,r:6,t:8,b:22},w=W-m.l-m.r,h=H-m.t-m.b;
+ const lo=Math.floor(Math.min(...vals.map(d=>d.bed),0)/120)*120-120,hi=Math.ceil(Math.max(...vals.map(d=>d.wake))/120)*120+60,Y=v=>m.t+(v-lo)/(hi-lo)*h,X=i=>m.l+(i+.5)/idx.length*w,bw=Math.max(3,Math.min(22,w/idx.length*(ps.length>1?.36:.6)));
+ let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Schlafzeiten je Nacht, ins Bett bis aufgestanden">`;
+ for(let t=Math.ceil(lo/120)*120;t<=hi;t+=120){const hh=((t%1440)+1440)%1440/60;g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${m.l-6}" y="${Y(t)+4}" text-anchor="end">${String(hh).padStart(2,'0')}</text>`}
+ const step=Math.ceil(idx.length/6);idx.forEach((i,k)=>{if(k%step===0||k===idx.length-1)g+=`<text x="${X(k)}" y="${H-6}" text-anchor="middle">${dfmt(dAt(i),{day:'numeric',month:'numeric'})}</text>`});
+ ps.forEach((pw,pi)=>idx.forEach((i,k)=>{const d=DAILY[pw][i];if(!ok(d.bed)||!ok(d.wake))return;const off=ps.length>1?(pi?bw/2+1:-bw/2-1):0;g+=`<rect x="${X(k)+off-bw/2}" y="${Y(d.bed)}" width="${bw}" height="${Math.max(2,Y(d.wake)-Y(d.bed))}" rx="${Math.min(5,bw/2)}" style="fill:var(${PERS[pw].c})"/>`}));
+ g+='</svg>';
+ const fm=v=>{v=((Math.round(v)%1440)+1440)%1440;return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0')},rg=ps.map(pw=>{const r=idx.map(i=>DAILY[pw][i]).filter(d=>ok(d.bed)&&ok(d.wake));if(!r.length)return'';const b=r.map(d=>d.bed),a=r.map(d=>d.wake);
+  return`<div class="sm"><b>${ps.length>1?esc(PERS[pw].n)+': ':''}</b>Ins Bett ${fm(Math.min(...b))} bis ${fm(Math.max(...b))}, aufgestanden ${fm(Math.min(...a))} bis ${fm(Math.max(...a))} <span class="muted">(${r.length} von ${idx.length} Nächten)</span></div>`}).join('');
+ box.innerHTML=head+g+`<div class="rg">${rg}</div>`}
 function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
  const wk=ps.map(w=>{const a=weekSum(w,0),b=weekSum(w,7);return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">letzte 7 Tage gegen die 7 davor</span></div><div class="kv">${[['Distanz',uv(a.dist,' km'),dl(a.dist,b.dist)],['Aufstieg',uv(a.asc,' m'),dl(a.asc,b.asc)],['Dauer',uv(a.dur,' h',f1),dl(a.dur,b.dur)],['Aktivitäten',f0(a.n),ok(a.n)&&ok(b.n)?a.n-b.n:null]].map(([n,val,d],i)=>`<div><b>${val}</b><span>${n}</span><span class="delta">${d==null?'':(d>0?'+':'')+d+(i===3?'':' %')+' zur Vorwoche'}</span></div>`).join('')}</div></div>`}).join('');
  const sports=ps.map(w=>{const lo=ND-29,m={};for(const a of ACTS)if(a.who===w&&!a.live&&dayOf(a.date)>=lo&&ok((DAILY[w][dayOf(a.date)]||{}).dist))m[a.sport]=(m[a.sport]||0)+a.st.dur/3600;const e=Object.entries(m).sort((x,y)=>y[1]-x[1]),mx=Math.max(...e.map(x=>x[1]),1);
@@ -1357,12 +1390,13 @@ function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
  <section class="card"><div class="chips" id="mets" style="margin-bottom:10px">${Object.entries(MET).map(([k,m])=>`<button class="chip" data-k="${k}" aria-pressed="${S.metric===k}">${m.n}</button>`).join('')}</div>
  <div class="tbar" style="margin-bottom:10px"><div class="seg" id="spans">${[['week','Woche'],['month','Monat'],['quarter','3 Monate'],['year','Jahr']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.span===k}">${n}</button>`).join('')}</div><span class="muted sm" id="trange"></span></div>
  <div class="chartbox" id="tc"></div><div class="kv" id="tk" style="margin-top:14px"></div></section>
+ <section class="card bedc" id="bcard"></section>
  <div class="cols">${sports}</div><div class="cols">${load}</div>
  <section class="card" id="acard"></section>
  ${ps.length>1?recordsPairHtml():`<div class="cols">${recordsHtml(ps)}</div>`}
  <section class="card" id="zlaunch"></section>
  <p class="muted sm" style="margin:0">${LIVE?'Echte Daten aus Home Assistant'+(OFF>0?', Verlauf ab '+dateNote():'')+'.':'Echte Verlaufsdaten aus dem Recorder gibt es erst ab 18.10.2026, alles davor sind Beispieldaten.'}</p></div>`;
- rangeCard();acwrCard(ps);moreBtn();
+ rangeCard();bedCard(ps);acwrCard(ps);moreBtn();
  {const kd=SH&&SH._o&&SH._o.kind;if(kd!=='kpi'&&kd!=='rsp'){if(S.cspo){const[cw,cs]=S.cspo.split('|');if(ps.includes(cw))openSheet({kind:'csp',title:SP[cs].n+': '+PERS[cw].n+', 30 Tage',icon:cs,color:PERS[cw].c,body:tourList(cw,cs,ND-29,ND),onClose:()=>{S.cspo=null;vTrend()}})}else if(S.more)openSheet({kind:'more',title:'Zusammenhänge',icon:'chart',color:'--c-sleep',body:'<section id="zcard"></section>',onClose:()=>{S.more=false;vTrend()}}),scatterCard(ps);else closeSheet(true)}}
  const doHeat=()=>$$('.heatwrap',v).forEach(h=>{const w=h.dataset.w,box=$('.hm',h);box.innerHTML=heat(w,Math.max(280,box.clientWidth||600))});doHeat();
  v.onclick=e=>{const o=e.target.closest('[data-open]');if(o&&!o.closest('#rcard')){S.sel=o.dataset.open;S.preset='all';S.range=null;S.tab='tour';render();return}const sp=e.target.closest('[data-csp]');if(sp){S.cspo=S.cspo===sp.dataset.csp?null:sp.dataset.csp;vTrend();return}const dy=e.target.closest('[data-day]');if(dy){S.day=+dy.dataset.day;S.tab='heute';render();return}const r=e.target.closest('rect[data-i]');if(!r||!+r.dataset.n)return;const w=r.closest('.heatwrap').dataset.w,idx=+r.dataset.i;const a=ACTS.find(x=>x.who===w&&dayOf(x.date)===idx);S.range=[dAt(idx),dAt((idx+1))];S.preset='custom';S.sel=a.id;S.tab='tour';render()};
@@ -1399,7 +1433,7 @@ function mapLiveAct(w,a){
  o.ll=a.w;o.w=a.w&&a.w.length>1?a.w.map(p=>W0(p[0],p[1])):null;o.gps=!!o.w;
  o.st=Object.assign({},a.st,{avgHR:a.st.avgHR||0,maxHR:a.st.maxHR||0,maxV:a.st.maxV||0});
  return o}
-const DKEYS=['imm','imh','steps','kcal','goal','rhr','hrv','sleep','slp','deep','rem','light','awake','need','bb','stress','sr','sl','sm','sh','vo2','kg','ready'];
+const DKEYS=['imm','imh','steps','kcal','goal','rhr','hrv','sleep','slp','deep','rem','light','awake','need','bb','stress','sr','sl','sm','sh','vo2','kg','ready','bed','wake'];
 /* Keine Lücken füllen: fehlt ein Wert, bleibt er null (auch Schritte und kcal) */
 const isNum=v=>v!=null&&typeof v!=='boolean'&&isFinite(v);
 function buildDaily(rows,acts,cov){
@@ -1507,6 +1541,14 @@ function readExtras(st,w,T){const pu=puOf(w),cu=UNAME[w],num=v=>{v=parseFloat(v)
  const ig=px('ziel_intensitatsminuten');T.imgoal=ig.v>0?Math.round(ig.v):null;
  T.zn=null;const mp=pers('zones')&&ent('maximalpuls_eingestellt');
  if(mp&&mp.attributes){const fl=[1,2,3,4,5].map(i=>num(mp.attributes['zone_'+i+'_floor']));if(fl.every(v=>v!=null)&&fl.every((v,i)=>!i||v>fl[i-1]))T.zn={fl,max:num(mp.state),lthr:px('laktatschwellen_herzfrequenz').v}}
+ /* Runde 3: Empfehlung für heute Abend (nur was Garmin liefert), Hinweise zu Abgleich und Schlüssel */
+ {const ob=FD.pickTs(st,pu,cu,'optimale_schlafenszeit'),ow=FD.pickTs(st,pu,cu,'optimale_aufwachzeit'),nd=px('nachster_schlafbedarf');
+  T.bedrec=ob.ms!=null&&ow.ms!=null&&ow.ms>ob.ms&&ow.ms-ob.ms<24*36e5?{bed:ob.ms,wake:ow.ms,need:nd.v!=null&&nd.v>0?Math.round(nd.v):null}:(nd.v!=null&&nd.v>0?{bed:null,wake:null,need:Math.round(nd.v)}:null);
+  const sy=FD.pickTs(st,pu,cu,'zuletzt_synchronisiert'),ov=st['binary_sensor.'+pu+'_uhr_synchronisation_uberfallig'],now=Date.now();
+  const ageH=sy.ms!=null&&now>=sy.ms?(now-sy.ms)/36e5:null,over=pers('sync')&&ov&&ov.state==='on';
+  T.sync=ageH!=null&&(over||ageH>18)?{ageH}:(over?{ageH:null}:null);
+  const ke=pers('sync')&&ent('api_schlussel_lauft_ab'),kt=ke&&ke.state&&!['unknown','unavailable',''].includes(ke.state)?Date.parse(ke.state):NaN;
+  T.key=isFinite(kt)?{days:Math.ceil((kt-now)/864e5)}:null;T.key=T.key&&T.key.days<14?T.key:null}
  T.last=null;const la=pers('te')&&ent('letzte_aktivitat');
  if(la&&la.attributes&&la.attributes.activityId!=null){const g=n=>{const e=ent('letzte_aktivitat_'+n);return e?num(e.state):null},aer=g('aerober_trainingseffekt'),ana=g('anaerober_trainingseffekt'),ld=g('trainingsbelastung');
   if(aer!=null||ana!=null||ld!=null)T.last={id:'g'+la.attributes.activityId,aer,ana,load:ld}}}
