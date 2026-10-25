@@ -1400,10 +1400,10 @@ function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week
  ps.forEach((pw,pi)=>{const r=idx.map(i=>rowOf(pw,i)).filter(has);if(!r.length)return;const ab=r.reduce((s,d)=>s+d.bed,0)/r.length,aw=r.reduce((s,d)=>s+d.wake,0)/r.length;
   for(const[v,t]of[[ab,'Bett'],[aw,'Aufstehen']]){g+=`<line class="bavg" x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:var(${PERS[pw].c});stroke-width:1;stroke-dasharray:2 4;opacity:.5"/>`;
    if(ps.length===1)g+=`<text x="${W-m.r+4}" y="${Y(v)+4}" style="fill:var(${PERS[pw].c});font-weight:400">Ø ${fm(v)}</text>`}});
- /* Balken je Nacht, letzte Nacht mit Ring, Dauer darunter wenn Platz ist */
+ /* Balken je Nacht, letzte Nacht kräftiger, Dauer darunter wenn Platz ist */
  const lab=colw>=(ps.length>1?58:34);
  ps.forEach((pw,pi)=>{const last=Math.max(...idx.filter(i=>has(rowOf(pw,i))),-1);idx.forEach((i,k)=>{const d=rowOf(pw,i);if(!has(d))return;const x=X(k)+offOf(pi)-bw/2,y=Y(d.bed),ht=Math.max(2,Y(d.wake)-y);
-  g+=`<rect class="bbar${i===last?' blast':''}" data-i="${i}" x="${x}" y="${y}" width="${bw}" height="${ht}" rx="${Math.min(5,bw/2)}" style="fill:var(${PERS[pw].c});opacity:${i===last?1:.78}${i===last?';stroke:var(--text);stroke-width:1':''}"/>`;
+  g+=`<rect class="bbar${i===last?' blast':''}" data-i="${i}" x="${x}" y="${y}" width="${bw}" height="${ht}" rx="${Math.min(5,bw/2)}" style="fill:var(${PERS[pw].c});opacity:${i===last?1:.55}"/>`;
   if(lab)g+=`<text class="bdur" x="${X(k)+offOf(pi)}" y="${y+ht+12}" text-anchor="middle">${hc(d.wake-d.bed)}</text>`})});
  /* Empfehlung für die kommende Nacht: gestrichelter Rahmen */
  if(anyRec)ps.forEach((pw,pi)=>{const r=rec[pi];if(!r)return;g+=`<rect class="brec" x="${X(idx.length)+offOf(pi)-bw/2}" y="${Y(r.bed)}" width="${bw}" height="${Math.max(2,Y(r.wake)-Y(r.bed))}" rx="${Math.min(5,bw/2)}" style="fill:none;stroke:var(${PERS[pw].c});stroke-width:1;stroke-dasharray:3 2"/>`});
@@ -1428,7 +1428,7 @@ function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week
   det=`<div class="bdet" aria-live="polite">${nav('Nacht auf '+esc(dfmt(dt,{weekday:'long',day:'numeric',month:'long'})))}${rows}</div>`}
  const rg=ps.map(pw=>{const r=idx.map(i=>rowOf(pw,i)).filter(has);if(!r.length)return'';const b=r.map(d=>d.bed),a=r.map(d=>d.wake),av=x=>x.reduce((s,y)=>s+y,0)/x.length;
   return`<div class="sm"><b>${ps.length>1?esc(PERS[pw].n)+': ':''}</b>Ins Bett ${fm(Math.min(...b))} bis ${fm(Math.max(...b))}, aufgestanden ${fm(Math.min(...a))} bis ${fm(Math.max(...a))}, Ø ${fm(av(b))} und ${fm(av(a))} <span class="muted">(${r.length} von ${idx.length} Nächten)</span></div>`}).join('');
- const lg=`<div class="lg bleg"><span><i class="bsw" style="border-top:2px dashed var(--text2)"></i>Durchschnitt</span>${anyRec?'<span><i class="bsw" style="border:1.5px dashed var(--text2);height:9px;border-radius:3px"></i>Empfehlung für heute Nacht (Garmin)</span>':''}<span><i class="bsw" style="background:var(--text);opacity:.08;height:9px"></i>Wochenende</span><span><i class="bsw" style="border:1.6px solid var(--text);height:9px;border-radius:3px"></i>letzte Nacht</span></div>`;
+ const lg=`<div class="lg bleg"><span><i class="bsw" style="border-top:2px dashed var(--text2)"></i>Durchschnitt</span>${anyRec?'<span><i class="bsw" style="border:1.5px dashed var(--text2);height:9px;border-radius:3px"></i>Empfehlung für heute Nacht (Garmin)</span>':''}<span><i class="bsw" style="background:var(--text);opacity:.08;height:9px"></i>Wochenende</span><span><i class="bsw" style="background:var(--text2);height:9px;border-radius:3px"></i>letzte Nacht kräftig</span></div>`;
  box.innerHTML=head+`<div class="bplot" tabindex="0" role="group" aria-label="Schlafzeiten je Nacht, mit Pfeiltasten eine Nacht wählen">${g}</div>${lg}${det}<div class="rg">${rg}</div>`;
  const pl=box.querySelector('.bplot'),pick=k=>{k=Math.max(0,Math.min(ns-1,k));S.bedSel=k>=idx.length?'rec':idx[k];bedCard(ps);const p2=$('#bcard .bplot');if(p2&&box._kb)p2.focus()},
   at=e=>{const r=pl.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W;return Math.floor((x-m.l)/w*ns)};
