@@ -31,6 +31,36 @@ const FIELDS={
  sr:['dauer_ruhestress','last'],sl:['dauer_niedriger_stress','last'],sm:['dauer_mittlerer_stress','last'],sh:['dauer_hoher_stress','last'],
  vo2:['vo2max','last'],kg:['gewicht','last'],
  ready:['trainingsbereitschaft','hist']};
+/* ---- Quellenwahl: eigene Integration (sensor.<name>_<x>) vor Garmin Connect (sensor.garmin_<name>_<x>) ----
+   PMAP: Connect-Name -> Name bei der eigenen Integration. Was dort fehlt (VO2max, Bereitschaft, Status), kommt immer von Connect.
+   Die eigene Integration liefert Zeiten in Sekunden, Connect in Minuten (PSEC): beim Lesen auf Minuten umgerechnet. */
+const PMAP={schritte:'schritte',kalorien:'gesamtkalorien',tagliches_schrittziel:'schrittziel',ruhepuls:'ruhepuls',hrv_letzte_nacht_durchschnitt:'hrv_letzte_nacht',schlafwert:'schlafwert',
+ gesamtschlafdauer:'schlafdauer',tiefschlaf:'tiefschlaf',rem_schlaf:'rem_schlaf',leichtschlaf:'leichtschlaf',wachzeit:'wachzeit',schlafbedarf:'schlafbedarf',
+ body_battery:'body_battery',durchschnittliches_stresslevel:'durchschnittlicher_stress',dauer_ruhestress:'ruhezeit_stress',dauer_niedriger_stress:'zeit_niedriger_stress',
+ dauer_mittlerer_stress:'zeit_mittlerer_stress',dauer_hoher_stress:'zeit_hoher_stress',gewicht:'gewicht',hrv_wochendurchschnitt:'hrv_wochendurchschnitt'};
+const PSEC=new Set(['gesamtschlafdauer','tiefschlaf','rem_schlaf','leichtschlaf','wachzeit','dauer_ruhestress','dauer_niedriger_stress','dauer_mittlerer_stress','dauer_hoher_stress']);
+const SRC={mode:'auto',by:{}}; /* by: Feldschlüssel (steps, bb, hrv …) -> auto|personal|connect */
+const MODES=['auto','personal','connect'];
+function setSourceConfig(c){c=c||{};SRC.mode=MODES.includes(c.source)?c.source:'auto';SRC.by={};for(const[k,v]of Object.entries(c.source_by||{}))if(MODES.includes(v))SRC.by[k]=v}
+function sourceMode(key){return(key&&SRC.by[key])||SRC.mode}
+const NAMEKEY={};for(const[k,v]of Object.entries(FIELDS))NAMEKEY[v[0]]=k;NAMEKEY.hrv_wochendurchschnitt='hrv';
+const connectId=(cu,name)=>'sensor.garmin_'+cu+'_'+name;
+const personalId=(pu,name)=>PMAP[name]&&pu?'sensor.'+pu+'_'+PMAP[name]:null;
+const unitFactor=(unit,name)=>unit==='s'?1/60:unit==='min'?1:unit==='h'?60:(PSEC.has(name)?1/60:1);
+/* Ein Messwert aus den HA-Zuständen: {v, src:'personal'|'connect'|null, e} */
+function pickState(states,pu,cu,name,mode){
+ mode=mode||sourceMode(NAMEKEY[name]);
+ const num=(e,f)=>{if(!e||e.state==null||e.state===''||e.state==='unknown'||e.state==='unavailable')return null;const v=parseFloat(e.state);return isFinite(v)?v*f:null};
+ const pid=personalId(pu,name),pe=pid&&states[pid],ce=states[connectId(cu,name)];
+ const P=()=>{const v=num(pe,unitFactor(pe&&pe.attributes&&pe.attributes.unit_of_measurement,name));return v==null?null:{v,src:'personal',e:pe}},C=()=>{const v=num(ce,1);return v==null?null:{v,src:'connect',e:ce}};
+ let r;
+ if(mode==='connect'||!pid)r=C();
+ else if(mode==='personal')r=P();
+ else r=P()||C();
+ return r||{v:null,src:null,e:null}}
+/* Entitäten für Verlauf und Langdruck: Reihenfolge der Kandidaten, die existieren */
+function candidateIds(states,pu,cu,name,mode){mode=mode||sourceMode(NAMEKEY[name]);const pid=personalId(pu,name),cid=connectId(cu,name),has=id=>id&&(!states||states[id]),out=[];
+ if(mode==='connect'||!pid){if(has(cid))out.push(cid)}else if(mode==='personal'){if(has(pid))out.push(pid)}else{if(has(pid))out.push(pid);if(has(cid))out.push(cid)}return out}
 const SPORT={mountain_biking:'mtb',cycling:'mtb',road_biking:'mtb',gravel_cycling:'mtb',e_bike_mountain:'mtb',running:'run',trail_running:'run',treadmill_running:'run',hiking:'hike',walking:'hike',resort_snowboarding:'ski',resort_skiing:'ski',backcountry_skiing:'ski',lap_swimming:'swim',open_water_swimming:'swim',yoga:'yoga'};
 
 /* ---- Tagesaggregation (rein, testbar) ---- */
@@ -61,25 +91,24 @@ function mergeActivities(w,lists,routes,tz){const m=new Map();for(const l of lis
 function routesFromStates(states){const m=new Map();for(const x of states||[]){const a=x.a||x.attributes;if(!a||!a.polyline||a.aktivitaet_id==null)continue;m.set(String(a.aktivitaet_id),{points:decodePolyline(a.polyline),start:a.startzeit,km:a.distanz_km,sport:a.sportart})}return m}
 
 /* ---- Recorder-Adapter ---- */
-function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',P='sensor.garmin_'+user+'_';
+function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',P='sensor.garmin_'+user+'_',PU=opt.personal||user,PP='sensor.'+PU+'_';
  const ws=msg=>hass.callWS(msg),cache=new Map(),memo=(k,f)=>{if(!cache.has(k))cache.set(k,f().catch(e=>{cache.delete(k);throw e}));return cache.get(k)};
  const stats=(ids,period,types,a,b)=>ws({type:'recorder/statistics_during_period',start_time:a,end_time:b,statistic_ids:ids,period,types});
  const hist=(ids,a,b)=>ws({type:'history/history_during_period',start_time:a,end_time:b,entity_ids:ids,include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:false});
  return{id:'recorder',user,tz,
   /* ältester Tag, für den der Recorder Garmin-Daten hat; davor liefert diese Quelle nichts */
-  async coverage(){return memo('cov',async()=>{const r=await stats([P+'schritte'],'day',['state'],'2026-01-01T00:00:00Z',new Date().toISOString());const rows=r[P+'schritte']||[];return rows.length?{from:dayIndex(rows[0].start,tz)}:{from:null}})},
+  async coverage(){return memo('cov',async()=>{const mode=sourceMode('steps'),ids=mode==='personal'?[PP+'schritte']:mode==='connect'?[P+'schritte']:[PP+'schritte',P+'schritte'];const r=await stats(ids,'day',['state'],'2026-01-01T00:00:00Z',new Date().toISOString());let from=null;for(const id of ids){const rows=r[id]||[];if(rows.length){const d=dayIndex(rows[0].start,tz);if(from==null||d<from)from=d}}return{from}})},
   /* Tageswerte: Array von {day, steps, ...} mit null bei fehlenden Werten */
-  async daily(fromDay,toDay){const a=dayStartIso(fromDay,tz),b=dayStartIso(toDay+1,tz),byKind={change:[],last:[],mean:[],hist:[]};
-   for(const[f,[id,k]]of Object.entries(FIELDS))byKind[k].push([f,id]);
-   const out=new Map();const put=(f,m)=>{for(const[d,v]of m){if(d<fromDay||d>toDay)continue;(out.get(d)||out.set(d,{day:d}).get(d))[f]=v}};
+  async daily(fromDay,toDay){const a=dayStartIso(fromDay,tz),b=dayStartIso(toDay+1,tz),byKind={change:new Set(),last:new Set(),mean:new Set(),hist:new Set()};
+   /* je Feld die Kandidaten in Auswahlreihenfolge (Quellenwahl): pro Tag gewinnt der erste mit Wert */
+   const cands={};for(const[f,[id,k]]of Object.entries(FIELDS)){const m=sourceMode(f),pn=PMAP[id],c={id:P+id,fac:1},pc=pn&&k!=='hist'?{id:PP+pn,fac:PSEC.has(id)?1/60:1}:null;
+    cands[f]=m==='connect'||!pc?[c]:m==='personal'?[pc]:[pc,c];for(const x of cands[f])byKind[k].add(x.id)}
+   const out=new Map();const put=(f,m,fac)=>{for(const[d,v0]of m){if(d<fromDay||d>toDay)continue;const o=out.get(d)||out.set(d,{day:d}).get(d);if(o[f]==null)o[f]=fac===1?v0:v0*fac}};
    const[dayRows,hourRows,hRows]=await Promise.all([
-    byKind.change.length?stats(byKind.change.map(x=>P+x[1]),'day',['change'],a,b):{},
-    byKind.last.length||byKind.mean.length?stats([...byKind.last,...byKind.mean].map(x=>P+x[1]),'hour',['mean','state'],a,b):{},
-    byKind.hist.length?hist(byKind.hist.map(x=>P+x[1]),a,b):{}]);
-   for(const[f,id]of byKind.change)put(f,aggregateStats(dayRows[P+id],'change',tz));
-   for(const[f,id]of byKind.last)put(f,aggregateStats(hourRows[P+id],'last',tz));
-   for(const[f,id]of byKind.mean)put(f,aggregateStats(hourRows[P+id],'mean',tz));
-   for(const[f,id]of byKind.hist)put(f,lastPerDay(hRows[P+id],tz));
+    byKind.change.size?stats([...byKind.change],'day',['change'],a,b):{},
+    byKind.last.size||byKind.mean.size?stats([...byKind.last,...byKind.mean],'hour',['mean','state'],a,b):{},
+    byKind.hist.size?hist([...byKind.hist],a,b):{}]);
+   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='hist'?lastPerDay(hRows[x.id],tz):aggregateStats((k==='change'?dayRows:hourRows)[x.id],k,tz),x.fac);
    const days=[];for(let d=fromDay;d<=toDay;d++){const o=out.get(d)||{day:d};for(const f of Object.keys(FIELDS))if(o[f]==null)o[f]=null;
     o.light=o.light; days.push(o)}return days},
   /* Aktivitäten, aus Historie der Garmin-Sensoren; Routen verknüpft über aktivitaet_id */
@@ -112,7 +141,7 @@ async function combine(recorder,archive){
   async dayCurve(d,k){return recorder.dayCurve(d,k)},
   async trackDetail(act){if(archive.enabled){try{return await archive.trackDetail(act)}catch(_){}}return null}}}
 
-const api={START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
+const api={PMAP,PSEC,setSourceConfig,sourceMode,pickState,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FitnessData=api;
 })(typeof self!=='undefined'?self:this);
 
@@ -171,6 +200,18 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .kv span{font-size:12px;color:var(--text2)}
 .btn{border:1px solid var(--sep);background:var(--surface);border-radius:999px;padding:7px 14px;min-height:36px;display:inline-flex;gap:6px;align-items:center}
 .btn.p{background:var(--text);color:var(--bg);border-color:var(--text)}
+/* Datenquelle, Schlaf-Teilwerte, dichte Verläufe */
+.srow{display:grid;grid-template-columns:104px 1fr auto;gap:8px;align-items:center;font-size:13px;margin:6px 0}
+.srow b{font-weight:600;white-space:nowrap}
+.sbar{position:relative;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}.sbar i{display:block;height:100%;border-radius:3px}
+.sbar u{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--text) 22%,transparent);border-radius:3px}
+.sx2{margin-top:10px;border-top:1px solid var(--sep);padding-top:10px}
+.sx2 p{margin:8px 0 0;font-size:13px}
+.ovl{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text2);margin-top:6px}
+.srctag{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--sep);color:var(--text2)}
+.srctag.e{color:var(--p1);border-color:currentColor}
+.srcseg{margin:8px 0;display:flex;width:100%}.srcseg button{flex:1 1 0;padding-inline:6px;min-width:0}
+.srcrow{padding:8px 0;border-top:1px solid var(--sep)}.srcrow .srcseg{margin:6px 0 0}.srchead{display:flex;justify-content:space-between;align-items:center;gap:8px}.srcvals{display:flex;gap:16px;margin-top:2px}
 /* Touren */
 .tour{display:grid;gap:14px;grid-template-columns:minmax(300px,370px) minmax(0,1fr);grid-template-areas:"list map" "list det";align-items:start}
 .tour .list{grid-area:list}.tour .mapcol{grid-area:map}.tour .det{grid-area:det}
@@ -476,7 +517,7 @@ const HTML=`<div class="wrap">
 </div>
 <nav class="dock" id="tabs" aria-label="Bereich"></nav>
 `;
-const liveSigOf=h=>Object.entries(h.states||{}).filter(([id,s])=>s&&((/^binary_sensor\.garmin_inreach_relay_livetrack_/.test(id)&&s.state==='on')||/^sensor\.garmin_[a-z]+_(schritte|body_battery|trainingsbereitschaft|ruhepuls|durchschnittliches_stresslevel)$/.test(id))).map(([id,s])=>id+'@'+((s.attributes||{}).last_update||s.last_updated||'')).sort().join('|');
+const liveSigOf=h=>Object.entries(h.states||{}).filter(([id,s])=>s&&((/^binary_sensor\.garmin_inreach_relay_livetrack_/.test(id)&&s.state==='on')||/^sensor\.garmin_[a-z0-9]+_(schritte|body_battery|trainingsbereitschaft|ruhepuls|durchschnittliches_stresslevel)$/.test(id)||/^sensor\.[a-z0-9]+_(schritte|body_battery|ruhepuls|durchschnittlicher_stress|schlafwert|hrv_letzte_nacht)$/.test(id))).map(([id,s])=>id+'@'+((s.attributes||{}).last_update||s.last_updated||'')).sort().join('|');
 function createApp(host,root,opts){
 
 const $=(s,e=root)=>e.querySelector(s),$$=(s,e=root)=>[...e.querySelectorAll(s)];
@@ -491,7 +532,7 @@ const dfmt=(d,o)=>d.toLocaleDateString('de-DE',o);
 const hm=s=>{if(!ok(s))return'–';s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+':'+String(m).padStart(2,'0')+' h':m+' min'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const IC={cmp:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',close:'<path d="M6 6l12 12M18 6L6 18"/>',mtb:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-8h5l3 8M10 8l3 8M9 6h3"/>',run:'<circle cx="14" cy="5" r="2"/><path d="M12 9l-3 3 3 2-2 5M12 9l4 2 3-1M12 14l4 1 1 4"/>',hike:'<path d="M3 19l6-10 4 6 2-3 6 7z"/>',ski:'<path d="M4 17l16-6M6 20l14-5"/><circle cx="9" cy="6" r="2"/><path d="M9 9l3 4"/>',swim:'<path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17M7 12l4-3 3 2"/><circle cx="16" cy="7" r="2"/>',yoga:'<circle cx="12" cy="5" r="2"/><path d="M12 8v5M7 20l5-7 5 7M6 11h12"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bolt:'<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',body:'<circle cx="12" cy="5.5" r="2"/><path d="M6 9h12M12 9v5M9 21l3-7 3 7"/>',calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',map:'<path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2zM9 4v14M15 6v14"/>',chart:'<path d="M5 20V10M12 20V4M19 20v-8"/>',play:'<path d="M8 5l11 7-11 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',send:'<path d="M4 12l16-8-6 16-3-7z"/>'};
+const IC={sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',cmp:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',close:'<path d="M6 6l12 12M18 6L6 18"/>',mtb:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-8h5l3 8M10 8l3 8M9 6h3"/>',run:'<circle cx="14" cy="5" r="2"/><path d="M12 9l-3 3 3 2-2 5M12 9l4 2 3-1M12 14l4 1 1 4"/>',hike:'<path d="M3 19l6-10 4 6 2-3 6 7z"/>',ski:'<path d="M4 17l16-6M6 20l14-5"/><circle cx="9" cy="6" r="2"/><path d="M9 9l3 4"/>',swim:'<path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17M7 12l4-3 3 2"/><circle cx="16" cy="7" r="2"/>',yoga:'<circle cx="12" cy="5" r="2"/><path d="M12 8v5M7 20l5-7 5 7M6 11h12"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bolt:'<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',body:'<circle cx="12" cy="5.5" r="2"/><path d="M6 9h12M12 9v5M9 21l3-7 3 7"/>',calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',map:'<path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2zM9 4v14M15 6v14"/>',chart:'<path d="M5 20V10M12 20V4M19 20v-8"/>',play:'<path d="M8 5l11 7-11 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',send:'<path d="M4 12l16-8-6 16-3-7z"/>'};
 const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''}>${IC[n]}</svg>`;
 const SP={mtb:{n:'Mountainbike',k:'Mountainbiken',hr:131,v:15.5,kc:10},run:{n:'Laufen',k:'Laufen',hr:150,v:10.4,kc:13},hike:{n:'Wandern',k:'Wandern',hr:119,v:3.9,kc:7.5},ski:{n:'Snowboard',k:'Snowboarden',hr:122,v:14,kc:8},swim:{n:'Schwimmen',k:'Schwimmen',hr:128,v:1.8,kc:9},yoga:{n:'Yoga',k:'Yoga',hr:82,v:0,kc:3}};
 const PL={stg:{n:'Musterstadt',lat:48.52,lon:9.05,el:360,sp:3.5},dol:{n:'Bergdorf',lat:46.41,lon:11.60,el:1180,sp:3},cam:{n:'Campitello di Fassa',lat:46.47,lon:11.74,el:1450,sp:2},tri:{n:'Triest',lat:45.66,lon:13.78,el:60,sp:2},faa:{n:'Faaker See',lat:46.55,lon:13.93,el:560,sp:1},car:{n:'Carezza',lat:46.40,lon:11.58,el:1700,sp:2}};
@@ -560,11 +601,26 @@ JA.filter(a=>a.sport==='hike').filter((a,i)=>i%2===0).slice(0,5).forEach((a,q)=>
  const k=makeAct('p2','p2j'+q,new Date(a.date.getTime()+10*6e4),'hike',a.place,a.seed,a.dist,a.gain,a.name);k.joint=a.id;
  k.st.dur*=1.06;k.st.avgHR+=6;k.st.maxHR+=4;k.st.load=Math.round(k.st.load*1.08);k.st.kcal*=.9;k.st.avgV=k.st.dist/k.st.dur*3.6;k.tr.t=k.tr.t.map(x=>x*1.06);
  k.tr.lat=k.tr.lat.map((x,i)=>x+.00005*Math.sin(i/6));k.tr.lon=k.tr.lon.map((x,i)=>x+.00007*Math.cos(i/5));k.w=k.tr.lat.map((la,i)=>W0(la,k.tr.lon[i]));JT.push(k)});
-ACTS=[...JA,...KA,...JT].sort((a,b)=>b.date-a.date);
+/* Beispiele für Aktivitäten ohne GPS und ohne Höhe (nur Mockup/Demo, im Live-Betrieb kommen die Werte aus dem Tracker-Verlauf):
+   Laufband mit Puls, Tempo und Distanz (keine Position, keine Höhe), Crosstrainer nur mit Puls (x-Achse = Zeit), Lauf mit GPS aber ohne Höhenwerte */
+const EX=[];
+{const r=rng(4242);
+ {const N=150,t=[],d=[],hr=[],v=[];let dd=0,h=96;
+  for(let i=0;i<=N;i++){const tt=i*16,blk=Math.floor(i/15),sp=i<12?7.5:i>N-10?7:(blk%2?12.8:9.6),vv=(sp+.3*Math.sin(i/3))/3.6;if(i)dd+=vv*16;t.push(tt);v.push(vv);d.push(dd);h+=((92+(sp-6)*13)-h)*.14+(r()-.5)*3;hr.push(h)}
+  const a={id:'jan_tm',who:'p1',date:new Date(2026,9,19,18,5),sport:'run',place:'stg',name:'Laufband',seed:1,dist:dd/1000,gain:0,gps:false};
+  a.tr={ele:null,hr,v,d,t};a.zones=[0,0,0,0,0];
+  a.st={dist:d[N],dur:t[N],gain:0,loss:0,avgHR:hr.reduce((x,y)=>x+y,0)/hr.length,maxHR:Math.max(...hr),kcal:t[N]/60*12,load:Math.round(t[N]/3600*Math.max(0,hr.reduce((x,y)=>x+y,0)/hr.length-70)*1.6),avgV:d[N]/t[N]*3.6};EX.push(a)}
+ {const N=90,t=[],hr=[];let h=100;
+  for(let i=0;i<=N;i++){t.push(i*20);const sp=i<10?0:(Math.floor(i/18)%2?1:.55);h+=((100+sp*62)-h)*.12+(r()-.5)*3;hr.push(h)}
+  const a={id:'kat_ct',who:'p2',date:new Date(2026,9,20,7,10),sport:'run',place:'stg',name:'Crosstrainer',seed:2,dist:0,gain:0,gps:false};
+  a.tr={ele:null,hr,v:t.map(()=>0),d:t.map(()=>0),t,nod:true,nov:true};a.zones=[0,0,0,0,0];
+  const av=hr.reduce((x,y)=>x+y,0)/hr.length;a.st={dist:0,dur:t[N],gain:0,loss:0,avgHR:av,maxHR:Math.max(...hr),kcal:t[N]/60*9,load:Math.round(t[N]/3600*Math.max(0,av-70)*1.6),avgV:0};EX.push(a)}
+ {const a=makeAct('p1','jan_ne',new Date(2026,9,17,16,40),'run','stg',555,6.4,0);a.tr.ele=null;a.st.gain=0;a.st.loss=0;EX.push(a)}}
+ACTS=[...JA,...KA,...JT,...EX].sort((a,b)=>b.date-a.date);
 byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
 /* Tageswerte */
 TODAYV={
- p1:{rlevel:'PRIME',rfac:[{n:'Schlaf (letzte Nacht)',pct:96,fb:'VERY_GOOD'},{n:'Erholungszeit',pct:100,fb:'GOOD',x:'0 h'},{n:'Belastung (akut/chronisch)',pct:91,fb:'GOOD',x:'412 akut'},{n:'Stressverlauf',pct:88,fb:'GOOD'},{n:'HRV',pct:95,fb:'VERY_GOOD',x:'84 ms Wochen-Ø'},{n:'Schlafverlauf',pct:82,fb:'MODERATE'}],steps:100,goal:7920,bb:71,rhr:51,rhr7:47,hrv:73,hrvW:84,sleep:82,stress:21,ready:97,status:'Peaking',vo2:54,kcal:595,slp:414,deep:131,light:228,rem:55,awake:4,need:400,sr:284,sl:94,sm:0,sh:0},
+ p1:{rlevel:'PRIME',rfac:[{n:'Schlaf (letzte Nacht)',pct:96,fb:'VERY_GOOD'},{n:'Erholungszeit',pct:100,fb:'GOOD',x:'0 h'},{n:'Belastung (akut/chronisch)',pct:91,fb:'GOOD',x:'412 akut'},{n:'Stressverlauf',pct:88,fb:'GOOD'},{n:'HRV',pct:95,fb:'VERY_GOOD',x:'84 ms Wochen-Ø'},{n:'Schlafverlauf',pct:82,fb:'MODERATE'}],steps:100,goal:7920,bb:71,rhr:51,rhr7:47,hrv:73,hrvW:84,sleep:82,stress:21,ready:97,status:'Peaking',vo2:54,kcal:595,slp:414,deep:131,light:228,rem:55,awake:4,need:400,sr:284,sl:94,sm:0,sh:0,sleepx:{dur:'excellent',stress:'excellent',wake:'good',rest:'good',fb:'positive_optimal_structure',ins:'positive_restful_evening',st:{deep:{v:20,lo:16,hi:33},rem:{v:31,lo:21,hi:31},light:{v:49,lo:30,hi:64}}}},
  p2:{rlevel:'HIGH',rfac:[{n:'Schlaf (letzte Nacht)',pct:90,fb:'GOOD'},{n:'Erholungszeit',pct:100,fb:'GOOD',x:'0 h'},{n:'Belastung (akut/chronisch)',pct:84,fb:'GOOD'},{n:'Stressverlauf',pct:93,fb:'VERY_GOOD'},{n:'HRV',pct:70,fb:'MODERATE',x:'56 ms Wochen-Ø'},{n:'Schlafverlauf',pct:88,fb:'GOOD'}],steps:65,goal:10000,bb:89,rhr:51,rhr7:50,hrv:56,hrvW:56,sleep:87,stress:16,ready:79,status:'Maintaining',vo2:55,kcal:422,slp:448,deep:60,light:282,rem:106,awake:1,need:460,sr:355,sl:12,sm:0,sh:0}};
 DAILY={};
 for(const w of['p1','p2']){const r=rng(w==='p1'?5:9),T=TODAYV[w],days=[];
@@ -596,9 +652,9 @@ let topRO=null;
 function topH(){const t=$('.top'),w=$('.wrap');if(!t||!w)return;const set=()=>w.style.setProperty('--toph',t.offsetHeight+'px');set();if(!topRO&&window.ResizeObserver){topRO=new ResizeObserver(set);topRO.observe(t)}}
 function mountHeader(){
  $('#tabs').innerHTML=TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" ${S.tab===k?'aria-current="page"':''}>${ic(i,24)}<span>${n}</span></button>`).join('');
- topH();navVariant();$('#who').className='chips2 whot';$('#who').innerHTML=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')+(WHO.some(x=>x[0]==='both')?`<button class="cmpb" data-k="both" aria-pressed="${S.who==='both'}" aria-label="Beide vergleichen">${ic('cmp',20)}</button>`:'')}
+ topH();navVariant();$('#who').className='chips2 whot';$('#who').innerHTML=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')+(WHO.some(x=>x[0]==='both')?`<button class="cmpb" data-k="both" aria-pressed="${S.who==='both'}" aria-label="Beide vergleichen">${ic('cmp',20)}</button>`:'')+`<button class="cmpb" data-k="src" aria-label="Datenquelle" title="Datenquelle">${ic('sliders',20)}</button>`}
 $('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;setTab(b.dataset.k)};
-$('#who').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;let nw;if(k==='both')nw=S.who==='both'?(S.last1||'p1'):'both';else nw=k;if(S.who!=='both')S.last1=S.who;if(nw!=='both')S.last1=nw;if(nw===S.who)return;S.who=nw;S.sel=null;S.card=null;S.kpi=null;S.pwin=null;render()};
+$('#who').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;if(k==='src'){openSource();return}let nw;if(k==='both')nw=S.who==='both'?(S.last1||'p1'):'both';else nw=k;if(S.who!=='both')S.last1=S.who;if(nw!=='both')S.last1=nw;if(nw===S.who)return;S.who=nw;S.sel=null;S.card=null;S.kpi=null;S.pwin=null;render()};
 function setTab(k){S.tab=k;S.play=false;clearInterval(playT);render()}
 let playT=0;
 function render(){closeSheet(true);if(S.tab!=='heute')S.card=null;if(S.tab!=='trend'){S.kpi=null;S.rsp=null;S.cspo=null;S.more=false}mountHeader();({heute:vHeute,tour:vTour,trend:vTrend})[S.tab]()}
@@ -789,6 +845,62 @@ const KN2={dist:'Distanz in km',ascent:'Aufstieg in m',dur:'Zeit in h',load:'Tra
 const bbNow=(w,di)=>di===ND&&TODAYV[w]&&TODAYV[w].bb!=null?TODAYV[w].bb:DAILY[w][di].bb;
 function bbRing(w,di){const v=bbNow(w,di);return`<button class="bbw" data-ins="bat" data-w="${w}" aria-label="Body Battery ${f0(v)} Prozent, Details öffnen">${gauge(v,80,8,'var(--c-heart)',f0(v),20)}<span class="muted sm">Body Battery</span></button>`}
 function miniBars(vals,lab,col){const W=300,H=96,n=vals.length,bw=W/(n||1),mx=Math.max(100,...nn(vals));return`<svg viewBox="0 0 ${W} ${H+18}" width="100%" role="img" aria-label="Verlauf">${vals.map((v,i)=>ok(v)?`<rect x="${(i*bw+2).toFixed(1)}" y="${(H-v/mx*H).toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${(v/mx*H).toFixed(1)}" rx="3" fill="${col}"><title>${lab[2]?lab[2](i)+': ':''}${f0(v)}</title></rect>`:'').join('')}<text x="2" y="${H+14}" font-size="11" fill="var(--text2)">${lab[0]}</text><text x="${W-2}" y="${H+14}" text-anchor="end" font-size="11" fill="var(--text2)">${lab[1]}</text></svg>`}
+/* ---------- Datenquelle (eigene Integration bevorzugt, sonst Garmin Connect) ---------- */
+let DEMOSRC='auto';
+const isLive=()=>typeof LIVE!=='undefined'&&LIVE;
+const SRCM=[['auto','Automatisch'],['personal','Nur eigene'],['connect','Nur Connect']];
+const SRCL={steps:'Schritte',bb:'Body Battery',stress:'Ø Stress',rhr:'Ruhepuls',hrv:'HRV letzte Nacht',sleep:'Schlafwert',kcal:'Kalorien',goal:'Schrittziel',ready:'Trainingsbereitschaft'};
+const SRCU={steps:'',bb:' %',stress:'',rhr:' bpm',hrv:' ms',sleep:'',kcal:' kcal',goal:'',ready:''};
+const srcModeNow=()=>isLive()?srcNow():DEMOSRC;
+/* Wahl je Messwert: Live auf diesem Gerät gemerkt (localStorage), im Mockup nur im Speicher. 'auto' = der globalen Wahl folgen */
+let DEMOBY={};
+const rowSel=k=>isLive()?srcRowMode(k):DEMOBY[k]||'auto';
+const rowEff=k=>{const r=rowSel(k);return r==='auto'?srcModeNow():r};
+/* Beispiel: Trainingsbereitschaft gibt es nur bei Connect, alles andere hat beide Quellen (Mockup: Connect weicht leicht ab) */
+function srcBoth(w,k){const T=TODAYV[w];if(isLive())return T&&T.both&&T.both[k]||{personal:null,connect:null};const v=T?T[k]:null;if(!ok(v))return{personal:null,connect:null};return k==='ready'?{personal:null,connect:v}:{personal:v,connect:k==='steps'?Math.round(v*.97):v}}
+function srcOf(w,k){if(isLive()){const T=TODAYV[w];return T&&T.src?T.src[k]||null:null}const b=srcBoth(w,k),m=rowEff(k);if(m==='connect')return b.connect!=null?'connect':null;if(m==='personal')return b.personal!=null?'personal':b.connect!=null?'connect':null;return b.personal!=null?'personal':b.connect!=null?'connect':null}
+function srcTag(s){return s==='personal'?'<span class="srctag e">Eigene</span>':s==='connect'?'<span class="srctag">Connect</span>':'<span class="muted">Verlauf</span>'}
+function openSource(){
+ const m=srcModeNow(),ws=persons(),note={auto:'Eigene Daten werden bevorzugt. Fehlt ein Wert, nimmt die Karte Garmin Connect.',personal:'Nur die eigene Integration. Fehlt dort ein Wert, steht „–“. Werte, die nur Connect liefert (zum Beispiel die Trainingsbereitschaft), kommen weiter von Connect.',connect:'Nur die bisherige Integration (Garmin Connect).'}[m];
+ const fv=(v,k)=>ok(v)?f0(v)+SRCU[k]:'–';
+ const tbl=w=>{const T=TODAYV[w];return`${ws.length>1?`<h3 class="insh">${esc(PERS[w].n)}</h3>`:''}<div class="srclist">${Object.keys(SRCL).map(k=>{const b=srcBoth(w,k),only=k==='ready',sel=rowSel(k);
+   const seg=only?'<span class="muted sm">Gibt es nur bei Connect</span>':`<div class="seg srcseg s" role="group" aria-label="Quelle für ${SRCL[k]}">${SRCM.map(([x,n])=>`<button data-src="${x}" data-key="${k}" aria-pressed="${sel===x}">${x==='auto'?'Auto':x==='personal'?'Eigene':'Connect'}</button>`).join('')}</div>`;
+   return`<div class="srcrow"><div class="srchead"><b>${SRCL[k]}</b>${srcTag(srcOf(w,k))}</div><div class="srcvals muted sm"><span>Eigene ${fv(b.personal,k)}</span><span>Connect ${fv(b.connect,k)}</span></div>${seg}</div>`}).join('')}</div>`};
+ const body=`<div class="ins"><p class="muted">Woher die Karte die heutigen Werte nimmt.${isLive()?'':' Im Mockup sind es Beispielwerte.'}</p>
+  <h3 class="insh">Alle Messwerte</h3>
+  <div class="seg srcseg" role="group" aria-label="Datenquelle">${SRCM.map(([k,n])=>`<button data-src="${k}" aria-pressed="${m===k}">${n}</button>`).join('')}</div>
+  <p class="muted sm" style="margin:6px 0 10px">${note} Gilt für alle Messwerte, die unten nicht einzeln gewählt sind.</p>${ws.map(tbl).join('')}
+  <p class="muted sm" style="margin-top:10px">Die Wahl gilt für Heute, Verläufe und die Verlaufsansicht und wird auf diesem Gerät gemerkt. „Auto“ folgt der Wahl oben. Die Konfiguration (source, source_by) bleibt die Vorgabe, bis hier etwas gewählt wird.</p></div>`;
+ openSheet({title:'Datenquelle',icon:'sliders',color:'--c-body',body,onClick:e=>{const b=e.target.closest('[data-src]');if(!b)return false;
+  const v=b.dataset.src,key=b.dataset.key||null;if(isLive()){switchSource(v,key).then(()=>openSource())}else{if(key)DEMOBY[key]=v;else DEMOSRC=v;openSource()}return true}})}
+/* ---------- Schlaf: Teilwerte und Garmins Einordnung (nur eigene Integration) ---------- */
+const SLQ={excellent:['Sehr gut',100],good:['Gut',75],fair:['Mittel',50],poor:['Schwach',25]};
+const SLFB={negative_discontinuous:'Unterbrochener Schlaf',negative_light:'Zu leichter Schlaf',negative_long_but_not_restorative:'Lang, aber wenig erholsam',negative_not_enough_rem:'Zu wenig REM-Schlaf',negative_not_restorative:'Wenig erholsam',negative_short_and_nonrecovering:'Kurz und wenig erholsam',negative_short_and_poor_structure:'Kurz mit schwachem Aufbau',positive_calm:'Ruhiger Schlaf',positive_continuous:'Durchgehender Schlaf',positive_deep:'Tiefer Schlaf',positive_highly_recovering:'Sehr erholsam',positive_long_and_continuous:'Lang und durchgehend',positive_long_and_deep:'Lang und tief',positive_long_and_refreshing:'Lang und erfrischend',positive_optimal_structure:'Optimaler Aufbau der Nacht',positive_recovering:'Erholsam',positive_refreshing:'Erfrischend',positive_short_but_recovering:'Kurz, aber erholsam',positive_short_but_refreshing:'Kurz, aber erfrischend'};
+const SLIN={negative_acclimatization_in_progress:'Die Höhenanpassung stört den Schlaf',negative_late_strenuous_exercise:'Spätes, intensives Training',negative_strenuous_exercise:'Intensives Training',negative_stressful_day:'Stressiger Tag',positive_acclimatization_in_progress:'Höhenanpassung läuft',positive_exercise:'Training hat geholfen',positive_late_bed_time:'Später ins Bett gegangen',positive_restful_day:'Ruhiger Tag',positive_restful_evening:'Ruhiger Abend'};
+function sleepxHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleepx;if(!x)return'';
+ const q=[['Dauer',x.dur],['Stress',x.stress],['Aufwachen',x.wake],['Unruhe',x.rest]].filter(([,v])=>SLQ[v]).map(([n,v])=>`<div class="srow"><span>${n}</span><div class="sbar"><i style="width:${SLQ[v][1]}%;background:var(--c-sleep)"></i></div><b>${SLQ[v][0]}</b></div>`).join('');
+ const st=[['Tiefschlaf','deep'],['REM','rem'],['Leichtschlaf','light']].filter(([,k])=>x.st&&x.st[k]).map(([n,k])=>{const o=x.st[k],has=o.lo!=null&&o.hi!=null;return`<div class="srow"><span>${n}</span><div class="sbar">${has?`<u style="left:${o.lo}%;width:${o.hi-o.lo}%"></u>`:''}<i style="width:${Math.min(100,o.v)}%;background:color-mix(in srgb,var(--c-sleep) 70%,var(--surface))"></i></div><b>${o.v} %${has?` <span class="muted sm">(Ideal ${o.lo}–${o.hi})</span>`:''}</b></div>`}).join('');
+ const fb=SLFB[x.fb],ins=SLIN[x.ins],tx=fb||ins?`<p>Garmin: ${[fb,ins].filter(Boolean).map(esc).join('. ')}.</p>`:'';
+ if(!q&&!st&&!tx)return'';
+ return`<div class="sx2"><b>Teilwerte des Schlafwerts</b>${q}${st?`<div class="muted sm" style="margin-top:8px">Anteile der Nacht, grauer Bereich = Idealbereich</div>${st}`:''}${tx}${isLive()?'':'<div class="muted sm" style="margin-top:6px">Beispieldaten</div>'}</div>`}
+/* ---------- Dichte Tagesverläufe (Minutentakt, aus den Verlaufssensoren) ---------- */
+function denseChart(box,pts,o){const W=Math.max(260,box.clientWidth||320),H=o.h||150,m={l:40,r:6,t:8,b:22},w=W-m.l-m.r,X=h=>m.l+h/24*w,Y=v=>m.t+(1-(v-o.lo)/(o.hi-o.lo))*(H-m.t-m.b);
+ let g='';for(let q=0;q<=2;q++){const v=o.lo+(o.hi-o.lo)*q/2,y=Y(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${m.l-6}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${f0(v)}</text>`}
+ for(let h=0;h<=24;h+=6)g+=`<text x="${X(h)}" y="${H-6}" text-anchor="${h===0?'start':h===24?'end':'middle'}" font-size="11" fill="var(--text2)">${h===24?'24':h} Uhr</text>`;
+ for(const r of o.ref||[])if(ok(r.v))g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(r.v)}" y2="${Y(r.v)}" stroke="var(--text2)" stroke-dasharray="4 3" stroke-width="1"/><text x="${W-m.r}" y="${Y(r.v)-4}" text-anchor="end" font-size="11" fill="var(--text2)">${r.n}</text>`;
+ /* Lücken über 45 Minuten werden nicht überbrückt */
+ const segs=[];let cur=[];for(const p of pts){if(cur.length&&p[0]-cur[cur.length-1][0]>.75){segs.push(cur);cur=[]}cur.push(p)}if(cur.length)segs.push(cur);
+ let marks='';for(const sg of segs){const d=sg.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');
+  if(sg.length>1)marks+=`<path d="${d} L${X(sg[sg.length-1][0]).toFixed(1)},${H-m.b} L${X(sg[0][0]).toFixed(1)},${H-m.b} Z" fill="${o.c}" opacity=".13"/>`;
+  marks+=`<path d="${d}" fill="none" stroke="${o.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`}
+ const e=pts[pts.length-1];marks+=`<circle cx="${X(e[0])}" cy="${Y(e[1])}" r="4" fill="${o.c}" stroke="var(--surface)" stroke-width="2"/>`;
+ box.style.position='relative';box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${o.aria||'Tagesverlauf'}">${g}${marks}</svg><div class="tip" hidden></div>`;
+ const svg=$('svg',box),tip=$('.tip',box);svg.onpointermove=ev=>{const r=svg.getBoundingClientRect(),h=((ev.clientX-r.left)/r.width*W-m.l)/w*24;let b=pts[0];for(const p of pts)if(Math.abs(p[0]-h)<Math.abs(b[0]-h))b=p;if(Math.abs(b[0]-h)>.75){tip.hidden=true;return}tip.hidden=false;tip.style.left=Math.max(60,Math.min(W-60,X(b[0])))+'px';tip.style.top=Y(b[1])+'px';tip.innerHTML=hh2(b[0])+' Uhr<br>'+o.fmt(b[1])};svg.onpointerleave=()=>{tip.hidden=true}}
+function denseSummary(pts,unit){let lo=pts[0],hi=pts[0];for(const p of pts){if(p[1]<lo[1])lo=p;if(p[1]>hi[1])hi=p}return`Höchster Wert ${f0(hi[1])}${unit} um ${hh2(hi[0])} Uhr, niedrigster ${f0(lo[1])}${unit} um ${hh2(lo[0])} Uhr.`}
+/* Mockup: Beispielkurve aus dem Stundenmodell, nur in der Demo */
+function denseDemo(w,di,kind){const hr=dayCurve(w,di,kind),r=rng(di*17+(w==='p1'?1:2)+kind.length),st=kind==='bb'?3:5,pts=[];
+ for(let m=0;m<=24*60;m+=st){const h=m/60,i=Math.min(23,Math.floor(h));if(hr[i]==null)continue;const j=Math.min(23,Math.max(0,h%1<.5?i-1:i+1)),a=hr[i],b=hr[j]==null?a:hr[j],t=Math.abs(h%1-.5),v=a+(b-a)*t+(r()-.5)*(kind==='bb'?1:7);pts.push([h,kind==='bb'?Math.max(2,Math.min(100,v)):Math.max(38,v)])}
+ return pts.length>=4?pts:null}
 function openInsight(w,k){const di=S.day,d=DAILY[w][di],now=di===ND,nm=PERS[w].n,lv=rLevel(w,di),fs=rFacs(w,di),i0=Math.max(0,di-13);
  const body=k==='rdy'?`<div class="ins"><div class="insbig"><b>${f0(d.ready)}</b>${lv?`<span>${esc(lv)}</span>`:''}</div>${lv?'<p class="muted">Einstufung laut Garmin.</p>':''}
   ${fs.length?`<h3 class="insh">Faktoren laut Garmin</h3><table class="tbl"><tr><th>Faktor</th><th>Anteil</th><th>Garmin</th></tr>${fs.map(x=>`<tr><td>${esc(x.n)}${x.x?` <span class="muted sm">${esc(x.x)}</span>`:''}</td><td style="white-space:nowrap">${ok(x.pct)?f0(x.pct)+' %':'–'}</td><td>${x.fb?esc(rFb(x.fb)):'–'}</td></tr>`).join('')}</table>`:''}
@@ -877,11 +989,17 @@ let DAYSRC=null;
 function dayBlock(w,k){const box=$('#dp-'+w);if(!box||k==='body')return;const di=S.day,dl=dfmt(dAt(di),{weekday:'long',day:'numeric',month:'long'}),T={sleep:'Schlafphasen in der Nacht zu '+dl,rec:'Body Battery am '+dl,act:'Schritte am '+dl,str:'Stress am '+dl}[k];
  box.insertAdjacentHTML(k==='act'?'afterbegin':'beforeend',`<div class="dday"><b>${T}</b><div class="chartbox" id="dd-${w}" style="margin-top:8px"></div><div class="muted sm" id="ddn-${w}" style="margin-top:6px"></div></div>`);
  const b=$('#dd-'+w,box),n=$('#ddn-'+w,box),d=DAILY[w][di],now=di===ND;
- if(k==='sleep'&&DAYSRC){const P=sleepParts(d);b.innerHTML=stackBar(P)+legendRow(P,hmm);n.textContent='Garmin liefert nur die Summen der Schlafphasen, nicht ihren Verlauf in der Nacht.';return}
- if(k==='sleep'){hypno(b,w,di);n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.';return}
+ if(k==='sleep'&&DAYSRC){const P=sleepParts(d);b.innerHTML=stackBar(P)+legendRow(P,hmm)+sleepxHtml(w,di);n.textContent='Garmin liefert nur die Summen der Schlafphasen, nicht ihren Verlauf in der Nacht.';return}
+ if(k==='sleep'){hypno(b,w,di);b.insertAdjacentHTML('beforeend',sleepxHtml(w,di));n.textContent='Atemfrequenz und Sauerstoffsättigung liefert die Uhr noch nicht. Sobald Werte ankommen, erscheinen sie hier über den Schlafphasen. Fahre über die Balken für Zeit und Dauer.';return}
  const kind={rec:'bb',act:'steps',str:'stress'}[k];
- const paint=R=>{if(!b.isConnected)return;const c=R?R[kind]:dayCurve(w,di,kind);if(!c||!c.some(x=>x!=null)){const dd=b.closest('.dday');if(dd)dd.remove();return}
-  if(k==='rec'){dayChart(b,c,{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent='Body Battery lädt im Schlaf und entlädt sich durch Stress und Training.'+(now&&ok(d.bb)?' Bis jetzt: '+d.bb+' %.':'')}
+ const paint=R=>{if(!b.isConnected)return;const c=R?R[kind]:dayCurve(w,di,kind),dense=k==='rec'&&R&&(R.bbd||R.hrd),has=c&&c.some(x=>x!=null);if(!has&&!dense){const dd=b.closest('.dday');if(dd)dd.remove();return}
+  if(k==='rec'){const bd=R?R.bbd:denseDemo(w,di,'bb'),hd=R?R.hrd:denseDemo(w,di,'hr');
+   if(bd){denseChart(b,bd,{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent=(R?'Alle paar Minuten ein Wert von der Uhr. ':'Beispielkurve. ')+denseSummary(bd,' %')+(now&&ok(d.bb)?' Bis jetzt: '+d.bb+' %.':'')}
+   else if(has){dayChart(b,c,{c:'var(--c-heart)',lo:0,hi:100,fmt:v=>f0(v)+' %',aria:'Body Battery im Tagesverlauf'});n.textContent='Body Battery lädt im Schlaf und entlädt sich durch Stress und Training.'+(now&&ok(d.bb)?' Bis jetzt: '+d.bb+' %.':'')}
+   else{const dd=b.closest('.dday');if(dd)dd.remove()}
+   if(hd){if(!$('#ddh-'+w,box)){box.insertAdjacentHTML('beforeend',`<div class="dday"><b>Puls am ${dl}</b><div class="chartbox" id="ddh-${w}" style="margin-top:8px"></div><div class="muted sm" id="ddhn-${w}" style="margin-top:6px"></div></div>`);
+     denseChart($('#ddh-'+w,box),hd,{c:'var(--c-heart)',lo:40,hi:Math.max(100,Math.ceil(Math.max(...hd.map(p=>p[1]))/20)*20),fmt:v=>f0(v)+' bpm',aria:'Puls im Tagesverlauf',ref:[{v:d.rhr,n:'Ruhepuls '+f0(d.rhr)}]});
+     $('#ddhn-'+w,box).textContent=(R?'Alle paar Minuten ein Wert von der Uhr. ':'Beispielkurve. ')+denseSummary(hd,' bpm')}}}
   else if(k==='act'){const v=c.map(x=>x||0),sum=v.reduce((x,y)=>x+y,0),mx=Math.max(...v),hi=Math.max(500,Math.ceil(mx/500)*500),top=v.indexOf(mx);dayChart(b,c,{c:'var(--c-act)',lo:0,hi,bars:true,solid:true,fmt:x=>f0(x)+' Schritte',aria:'Schritte im Tagesverlauf'});n.textContent=`Schritte pro Stunde. Summe ${f0(sum)}${now?' bis jetzt':''}, Ziel ${f0(d.goal)}.${mx>0?` Aktivste Stunde: ${top} bis ${top+1} Uhr mit ${f0(mx)} Schritten.`:''}`}
   else{dayChart(b,c,{c:'var(--c-str)',lo:0,hi:100,bars:true,fmt:x=>f0(x)+' Stresslevel',aria:'Stress im Tagesverlauf'});n.textContent='Garmin-Stresslevel pro Stunde. Training zählt als Aktivitätsstress.'}};
  if(DAYSRC){b.innerHTML='<div class="muted sm">Lade Tagesverlauf…</div>';DAYSRC(w,di).then(paint,e=>{console.log('DAYERR',e&&e.message);paint({})})}else paint(null)}
@@ -989,7 +1107,7 @@ function drawMap(){if(!mctx||!mW)return;const c=mctx;c.setTransform(dpr,0,0,dpr,
  if(sel&&sel.gps){path(c,sel);c.strokeStyle=css('--surface');c.lineWidth=8;c.stroke();c.strokeStyle=col(sel.who);c.lineWidth=4.5;c.stroke();const pj=jointOf(sel);if(pj&&pj.gps){path(c,pj);c.setLineDash([9,6]);c.strokeStyle=col(pj.who);c.lineWidth=3;c.stroke();c.setLineDash([])}
   const w=sel.w,n=w.length-1;ringAt(c,w[0],col(sel.who),6);dotAt(c,w[n],col(sel.who),7,true);if(sel.live)livePulse(c,w[n],col(sel.who));
   if(MV.z>=11){const every=MV.z>=13?1:5;c.font='600 10px -apple-system,system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';for(let k=every;k*1000<sel.st.dist;k+=every){const i=kmIndex(sel,k*1000);if(i<0)break;const x=sx(w[i][0]),y=sy(w[i][1]);c.fillStyle=css('--surface');c.beginPath();c.arc(x,y,9,0,7);c.fill();c.strokeStyle=col(sel.who);c.lineWidth=1.5;c.stroke();c.fillStyle=css('--text');c.fillText(k,x,y+.5)}}
-  if(S.cursor!=null){const w2=sel.w[S.cursor];dotAt(c,w2,css('--text'),7,true)}}}
+  if(S.cursor!=null){const ci=sel.tr&&sel.tr.wi?sel.tr.wi[S.cursor]:S.cursor,w2=sel.w[ci];if(w2)dotAt(c,w2,css('--text'),7,true)}}}
 function path(c,a){c.beginPath();const s=MV.z<10?4:MV.z<12?2:1;for(let i=0;i<a.w.length;i+=s){const x=sx(a.w[i][0]),y=sy(a.w[i][1]);i?c.lineTo(x,y):c.moveTo(x,y)}const l=a.w[a.w.length-1];c.lineTo(sx(l[0]),sy(l[1]))}
 function ringAt(c,p,color,r){const x=sx(p[0]),y=sy(p[1]);c.fillStyle=css('--surface');c.beginPath();c.arc(x,y,r+2,0,7);c.fill();c.strokeStyle=color;c.lineWidth=3;c.beginPath();c.arc(x,y,r-1,0,7);c.stroke()}
 let liveRaf=0;
@@ -1037,53 +1155,73 @@ function wireScrub(){const cv=$('#scrub');let down=false;const pick=e=>{const[T0
 function eleStats(a){const e=a.tr&&a.tr.ele;if(!e||e.length<2)return null;let l=0,ref=e[0];for(const h of e){if(h-ref>=3)ref=h;else if(ref-h>=3){l+=ref-h;ref=h}}return{loss:Math.round(l),min:Math.min(...e),max:Math.max(...e)}}
 const has=v=>v!=null&&isFinite(v)&&v>0;
 function tourKv(a,s,pace,avgTxt){const es=eleStats(a),k=[],add=(v,l)=>k.push(`<div><b>${v}</b><span>${l}</span></div>`);
- if(a.gps)add(f1(s.dist/1000)+'\u00a0km','Distanz');add(hm(s.dur),'Zeit');
- if(a.gps){add(avgTxt,pace?'Ø Pace':'Ø Tempo');if(es)add(f0(s.gain)+'\u00a0/\u00a0'+f0(es.loss)+'\u00a0m','Anstieg / Abstieg');else if(has(s.gain))add(f0(s.gain)+'\u00a0m','Aufstieg');if(es)add(f0(es.min)+'\u00a0/\u00a0'+f0(es.max)+'\u00a0m','Höhe min / max')}
+ if(a.gps||has(s.dist))add(f1(s.dist/1000)+'\u00a0km','Distanz');add(hm(s.dur),'Zeit');
+ if(a.gps||has(s.avgV))add(avgTxt,pace?'Ø Pace':'Ø Tempo');
+ if(a.gps||es){if(es)add(f0(s.gain)+'\u00a0/\u00a0'+f0(es.loss)+'\u00a0m','Anstieg / Abstieg');else if(has(s.gain))add(f0(s.gain)+'\u00a0m','Aufstieg');if(es)add(f0(es.min)+'\u00a0/\u00a0'+f0(es.max)+'\u00a0m','Höhe min / max')}
  if(has(s.avgHR)&&has(s.maxHR))add(f0(s.avgHR)+'\u00a0/\u00a0'+f0(s.maxHR)+'\u00a0bpm','Puls Ø / max');else if(has(s.avgHR))add(f0(s.avgHR)+'\u00a0bpm','Ø Puls');else if(has(s.maxHR))add(f0(s.maxHR)+'\u00a0bpm','Max. Puls');
  if(!a.live){add(f0(s.kcal),'kcal');add(s.load,'Trainingslast')}
  return k.join('')}
 /* Details */
 function detail(){const box=$('#det');if(!box)return;const a=byId[S.sel];if(!a){box.innerHTML='';return}
- if(needTr(a))loadTr(a).then(ok=>{if(ok&&S.sel===a.id&&S.tab==='tour'&&!SH){const el=$('#det');if(el){fitList([a],60,true);detail();drawMap()}}});
+ if(needTr(a))loadTr(a).then(ok=>{if(ok&&S.sel===a.id&&S.tab==='tour'&&!SH){const el=$('#det');if(el){if(a.gps)fitList([a],60,true);detail();drawMap()}}});
  const s=a.st,sp=SP[a.sport],pace=a.sport==='run'||a.sport==='hike';
  const avgPace=sec=>pc(sec);
- const avgTxt=a.gps?(!has(s.avgV)?'–':pace?avgPace(3600/s.avgV)+' /km':f1(s.avgV)+' km/h'):'';
+ const avgTxt=(a.gps||has(s.avgV))?(!has(s.avgV)?'–':pace?avgPace(3600/s.avgV)+' /km':f1(s.avgV)+' km/h'):'';
  box.innerHTML=`<div class="card"><div class="dh"><span class="pill" style="--pc:var(${PERS[a.who].c})">${PERS[a.who].n}</span><h3>${a.live?'<span class="ldot" title="Live"></span>':''}${esc(ttl(a))}</h3><span class="muted sm">${sp.n} · ${dfmt(a.date,{weekday:'long',day:'numeric',month:'long'})}, ${a.date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>${a.sname?`<div class="muted sm" style="margin:-6px 0 12px"><span class="chip" style="min-height:24px;padding:0 9px;font-size:12px">Titel von Strava</span> Garmin-Name: ${esc(a.name)}</div>`:''}
  <div class="kv kvt" style="margin-bottom:14px">${tourKv(a,s,pace,avgTxt)}${a.sx?`<div><b>${a.sx.ach}</b><span>Strava-Erfolge</span></div><div><b>${a.sx.pr}</b><span>Bestzeiten (PR)</span></div>${a.sx.pow?`<div><b>${a.sx.pow} W</b><span>Ø Leistung</span></div>`:''}${a.sx.cad?`<div><b>${a.sx.cad} spm</b><span>Ø Kadenz</span></div>`:''}${a.sx.gear?`<div class="kvl"><b>${esc(a.sx.gear)}</b><span>Fahrrad</span></div>`:''}<div class="kvl"><b>${esc(a.sx.dev)}</b><span>Gerät</span></div>`:''}</div><div id="dmore">
- ${jointHtml(a)}${a.gps&&a.tr?`<div class="seg" id="dt" style="margin-bottom:10px">${[['profil','Profil'],['splits','Splits'],['zonen','Pulszonen']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.dtab===k}">${n}</button>`).join('')}</div><div id="dbody"></div>`:`<div class="note">${a.live?'Höhenprofil, Tempo und Splits liefert das inReach-Add-on, sobald es angebunden ist.':a.gps?'Höhenprofil, Tempo und Splits kommen mit dem Archiv. Pulszonen gibt es schon.':'Keine GPS-Route bei dieser Aktivität. Pulszonen gibt es trotzdem.'}</div><div id="dbody" style="margin-top:10px"></div>`}
+ ${jointHtml(a)}${a.tr?`<div class="seg" id="dt" style="margin-bottom:10px">${[['profil','Profil'],['splits','Splits'],['zonen','Pulszonen']].filter(([k])=>!(k==='splits'&&a.tr.nod)).map(([k,n])=>`<button data-k="${k}" aria-pressed="${dtabOf(a)===k}">${n}</button>`).join('')}</div><div id="dbody"></div>`:`<div class="note">${a.live?'Höhenprofil, Tempo und Splits liefert das inReach-Add-on, sobald es angebunden ist.':a.gps?'Höhenprofil, Tempo und Splits kommen mit dem Archiv. Pulszonen gibt es schon.':'Keine GPS-Route bei dieser Aktivität. Pulszonen gibt es trotzdem.'}</div><div id="dbody" style="margin-top:10px"></div>`}
  </div></div>`;
  const dt=$('#dt');if(dt)dt.onclick=e=>{const b=e.target.closest('button');if(!b)return;S.dtab=b.dataset.k;$$('#dt button').forEach(x=>x.setAttribute('aria-pressed',x===b));dbody(a)};
  dbody(a)}
+/* Welche Ansicht gilt: ohne Verlauf nur Pulszonen; ohne Distanz gibt es keine Splits */
+const dtabOf=a=>!a.tr?'zonen':(S.dtab==='splits'&&a.tr.nod)?'profil':S.dtab;
+/* Welche Kurve unter der Höhe läuft: Puls oder Tempo, je nachdem, was die Quelle liefert */
+const dmetOf=a=>{const T=a.tr;if(!T)return S.dmet;if(S.dmet==='hr'&&T.nohr)return T.nov?null:'v';if(S.dmet==='v'&&T.nov)return T.nohr?null:'hr';return S.dmet};
+const roHint=a=>a.w?'Fahre mit dem Finger oder der Maus über das Profil: der Punkt wandert auf der Karte mit. Tippen blendet das Tempo pro Kilometer ein oder aus.':a.tr&&a.tr.nod?'Fahre mit dem Finger oder der Maus über das Profil.':'Fahre mit dem Finger oder der Maus über das Profil. Tippen blendet das Tempo pro Kilometer ein oder aus.';
 function zonesOf(a){const z=[0,0,0,0,0],T=a.tr;if(a.zones&&a.zones.some(x=>x>0))return a.zones.slice();if(!T||T.nohr)return z;for(let i=1;i<T.hr.length;i++){const h=T.hr[i],k=h<111?0:h<130?1:h<148?2:h<167?3:4;z[k]+=T.t[i]-T.t[i-1]}return z}
-function dbody(a){const b=$('#dbody');if(!b)return;if(a.live&&!a.tr){b.innerHTML='';return}const k=a.gps&&a.tr?S.dtab:'zonen';
- if(k==='profil'){if(a.tr&&a.tr.nohr)S.dmet='v';b.innerHTML=`<div class="chips" style="margin-bottom:6px">${[['hr','Puls'],['v','Tempo']].filter(([k2])=>!(k2==='hr'&&a.tr&&a.tr.nohr)).map(([k2,n])=>`<button class="chip" data-m="${k2}" aria-pressed="${S.dmet===k2}">${n}</button>`).join('')}</div><div class="ro" id="ro">Fahre mit dem Finger oder der Maus über das Profil: der Punkt wandert auf der Karte mit. Tippen blendet das Tempo pro Kilometer ein oder aus.</div><div class="chartbox" id="pf"></div><div id="pacebox" class="chartbox"></div>`;
+function dbody(a){const b=$('#dbody');if(!b)return;if(a.live&&!a.tr){b.innerHTML='';return}const k=dtabOf(a);
+ if(k==='profil'){b.innerHTML=`<div class="chips" style="margin-bottom:6px">${[['hr','Puls'],['v','Tempo']].filter(([k2])=>!(k2==='hr'&&a.tr.nohr)&&!(k2==='v'&&a.tr.nov)).map(([k2,n])=>`<button class="chip" data-m="${k2}" aria-pressed="${dmetOf(a)===k2}">${n}</button>`).join('')}</div><div class="ro" id="ro">${roHint(a)}</div><div class="chartbox" id="pf"></div><div id="pacebox" class="chartbox"></div>`;
   $$('.chip',b).forEach(c=>c.onclick=()=>{S.dmet=c.dataset.m;dbody(a)});profile(a)}
  else if(k==='splits'){const T=a.tr,rows=[];let from=0,km=1;const pace=a.sport==='run'||a.sport==='hike';
-  const mk=(i0,i1,k2)=>{const dd=T.d[i1]-T.d[i0],tt=T.t[i1]-T.t[i0];let g=0,l=0,hs=0;for(let i=i0+1;i<=i1;i++){const de=T.ele[i]-T.ele[i-1];de>0?g+=de:l-=de;hs+=T.hr[i]}return{k:k2,dd,tt,g,l,hr:hs/(i1-i0),v:dd/tt*3.6}};
+  const mk=(i0,i1,k2)=>{const dd=T.d[i1]-T.d[i0],tt=T.t[i1]-T.t[i0];let g=0,l=0,hs=0;for(let i=i0+1;i<=i1;i++){if(T.ele){const de=T.ele[i]-T.ele[i-1];de>0?g+=de:l-=de}if(!T.nohr)hs+=T.hr[i]}return{k:k2,dd,tt,g,l,hr:hs/(i1-i0),v:dd/tt*3.6}};
   for(let i=1;i<T.d.length;i++)if(T.d[i]>=km*1000){rows.push(mk(from,i,km));from=i;km++}
   if(T.d[T.d.length-1]-T.d[from]>60)rows.push(mk(from,T.d.length-1,km));
   const vmax=Math.max(...rows.map(r=>r.v));
-  b.innerHTML=`<div style="overflow-x:auto"><table class="tbl"><tr><th>km</th><th>${pace?'Pace':'Tempo'}</th><th></th><th>↑ m</th><th>↓ m</th><th>Puls</th></tr>${rows.map(r=>`<tr><td>${r.dd<990?f1(r.dd/1000):r.k}</td><td>${pace?Math.floor(3600/r.v/60)+':'+String(Math.round(3600/r.v%60)).padStart(2,'0'):f1(r.v)}</td><td style="width:34%"><div class="bar"><i style="width:${r.v/vmax*100}%;background:var(${PERS[a.who].c})"></i></div></td><td>${f0(r.g)}</td><td>${f0(r.l)}</td><td>${f0(r.hr)}</td></tr>`).join('')}</table></div>`}
+  b.innerHTML=`<div style="overflow-x:auto"><table class="tbl"><tr><th>km</th><th>${pace?'Pace':'Tempo'}</th><th></th>${T.ele?'<th>↑ m</th><th>↓ m</th>':''}${T.nohr?'':'<th>Puls</th>'}</tr>${rows.map(r=>`<tr><td>${r.dd<990?f1(r.dd/1000):r.k}</td><td>${pace?Math.floor(3600/r.v/60)+':'+String(Math.round(3600/r.v%60)).padStart(2,'0'):f1(r.v)}</td><td style="width:34%"><div class="bar"><i style="width:${r.v/vmax*100}%;background:var(${PERS[a.who].c})"></i></div></td>${T.ele?`<td>${f0(r.g)}</td><td>${f0(r.l)}</td>`:''}${T.nohr?'':`<td>${f0(r.hr)}</td>`}</tr>`).join('')}</table></div>`}
  else{const z=zonesOf(a),tot=z.reduce((x,y)=>x+y,0)||1;if(!z.some(v=>v>0)){b.innerHTML='<div class="muted">Keine Pulszonen von Garmin für diese Aktivität.</div>';return}const cs=['#8DA2B8','#4FA6A0','#7FB24A','#E0A21C','#D3322B'],nm=['Zone 1 Erholung','Zone 2 Grundlage','Zone 3 Tempo','Zone 4 Schwelle','Zone 5 Maximal'];
   const hard=(z[3]+z[4])/tot*100;
   b.innerHTML=`<div class="zones">${z.map((v,i)=>`<i style="width:${Math.max(.5,v/tot*100)}%;background:${cs[i]}" title="${nm[i]}"></i>`).join('')}</div><table class="tbl">${z.map((v,i)=>`<tr><td><span class="dot" style="background:${cs[i]};margin-right:8px"></span>${nm[i]}</td><td>${hm(v)}</td><td>${Math.round(v/tot*100)} %</td></tr>`).join('')}</table>
   <div class="note" style="margin-top:10px">${Math.round(hard)} % der Zeit in Zone 4 und 5.</div>`}}
-function profile(a){const box=$('#pf');if(!box)return;const T=a.tr,W=box.clientWidth||600,m={l:40,r:8},h1=110,h2=84,gap=14,H=h1+h2+gap+22,n=T.d.length,D1=T.d[n-1];
- const X=i=>m.l+T.d[i]/D1*(W-m.l-m.r),emn=Math.min(...T.ele),emx=Math.max(...T.ele),ep=(emx-emn)*.1||5,Ye=v=>6+(1-(v-(emn-ep))/((emx+ep)-(emn-ep)))*(h1-12);
- const arr=S.dmet==='hr'&&!T.nohr?T.hr:T.v.map(v=>v*3.6),vmn=Math.min(...arr),vmx=Math.max(...arr),vp=(vmx-vmn)*.1||1,Yv=v=>h1+gap+6+(1-(v-(vmn-vp))/((vmx+vp)-(vmn-vp)))*(h2-12);
+function profile(a){const box=$('#pf');if(!box)return;const T=a.tr,W=box.clientWidth||600,m={l:40,r:8},n=T.t.length,tx=!!T.nod,xs=tx?T.t:T.d,D1=xs[n-1]||1;
+ /* Höhe nur mit Höhenwerten, darunter Puls oder Tempo nur, wenn die Quelle sie liefert; x-Achse = Distanz, ohne Distanz die Zeit */
+ const dm=dmetOf(a),arr=dm==='hr'?T.hr:dm==='v'?T.v.map(v=>v*3.6):null,hasE=!!T.ele,hasS=!!arr;
+ const h1=hasE?110:0,h2=hasS?(hasE?84:110):0,gap=hasE&&hasS?14:0,H=h1+h2+gap+22;
+ const X=i=>m.l+xs[i]/D1*(W-m.l-m.r);
  const c=col(a.who);let g='';
- for(let k=0;k<=2;k++){const v=emn+(emx-emn)*k/2,y=Ye(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${m.l-5}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${f0(v)}</text>`}
- for(let k=0;k<=2;k++){const v=vmn+(vmx-vmn)*k/2,y=Yv(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${m.l-5}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${f0(v)}</text>`}
- const kmStep=D1>30000?10:D1>12000?5:D1>5000?2:1;let xl='';for(let k=0;k*1000<=D1;k+=kmStep){const x=m.l+k*1000/D1*(W-m.l-m.r);xl+=`<text x="${x}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--text2)">${k} km</text>`}
- const area=`M${X(0)},${h1} `+T.ele.map((e,i)=>`L${X(i).toFixed(1)},${Ye(e).toFixed(1)}`).join(' ')+` L${X(n-1)},${h1} Z`;
- const line=arr.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Yv(v).toFixed(1)).join(' ');
- box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><text x="${m.l}" y="10" font-size="11" fill="var(--text2)" dy="-0"> </text>${g}${xl}<path d="${area}" fill="${c}" fill-opacity=".18"/><path d="${area.replace(/ Z$/,'').replace(/^M[^L]*L/,'M')}" fill="none" stroke="${c}" stroke-width="1.8"/><path d="${line}" fill="none" stroke="${c}" stroke-width="1.8"/><line id="cur" y1="0" y2="${H-18}" stroke="var(--text)" visibility="hidden"/></svg>`;
+ let Ye=()=>0,emn=0,emx=0;
+ if(hasE){emn=Math.min(...T.ele);emx=Math.max(...T.ele);const ep=(emx-emn)*.1||5;Ye=v=>6+(1-(v-(emn-ep))/((emx+ep)-(emn-ep)))*(h1-12);
+  for(let k=0;k<=2;k++){const v=emn+(emx-emn)*k/2,y=Ye(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${m.l-5}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${f0(v)}</text>`}}
+ let Yv=()=>0;
+ if(hasS){const vmn=Math.min(...arr),vmx=Math.max(...arr),vp=(vmx-vmn)*.1||1,o2=h1+gap;Yv=v=>o2+6+(1-(v-(vmn-vp))/((vmx+vp)-(vmn-vp)))*(h2-12);
+  for(let k=0;k<=2;k++){const v=vmn+(vmx-vmn)*k/2,y=Yv(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${m.l-5}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--text2)">${(dm==='v'&&vmx-vmn<3?f1:f0)(v)}</text>`}}
+ let xl='';
+ if(tx){const mins=D1/60,st=[1,2,5,10,15,20,30,60,120].find(q=>mins/q<=6)||180;for(let k=0;k*st*60<=D1;k++){const x=m.l+k*st*60/D1*(W-m.l-m.r);xl+=`<text x="${x}" y="${H-4}" text-anchor="${!k?'start':k*st*60>D1*.96?'end':'middle'}" font-size="11" fill="var(--text2)">${k*st} min</text>`}}
+ else{const kmStep=D1>30000?10:D1>12000?5:D1>5000?2:1;for(let k=0;k*1000<=D1;k+=kmStep){const x=m.l+k*1000/D1*(W-m.l-m.r);xl+=`<text x="${x}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--text2)">${k} km</text>`}}
+ let paths='';
+ if(hasE){const area=`M${X(0)},${h1} `+T.ele.map((e,i)=>`L${X(i).toFixed(1)},${Ye(e).toFixed(1)}`).join(' ')+` L${X(n-1)},${h1} Z`;
+  paths+=`<path d="${area}" fill="${c}" fill-opacity=".18"/><path d="${area.replace(/ Z$/,'').replace(/^M[^L]*L/,'M')}" fill="none" stroke="${c}" stroke-width="1.8"/>`}
+ if(hasS){const line=arr.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Yv(v).toFixed(1)).join(' ');paths+=`<path d="${line}" fill="none" stroke="${c}" stroke-width="1.8"/>`}
+ box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><text x="${m.l}" y="10" font-size="11" fill="var(--text2)" dy="-0"> </text>${g}${xl}${paths}<line id="cur" y1="0" y2="${H-18}" stroke="var(--text)" visibility="hidden"/></svg>`;
  const svg=$('svg',box),cur=$('#cur',box),ro=$('#ro');
- const mv=e=>{const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,dd=Math.max(0,Math.min(D1,(x-m.l)/(W-m.l-m.r)*D1));let lo=0,hi=n-1;while(lo<hi){const mid=lo+hi>>1;T.d[mid]<dd?lo=mid+1:hi=mid}
-  cur.setAttribute('x1',X(lo));cur.setAttribute('x2',X(lo));cur.setAttribute('visibility','visible');S.cursor=lo;drawMap();
-  const pace=a.sport==='run'||a.sport==='hike',sv=T.v[lo]*3.6;
-  ro.innerHTML=`<b>${f1(T.d[lo]/1000)} km</b> · ${f0(T.ele[lo])} m ${T.nohr?'':' · '+f0(T.hr[lo])+' bpm'} · ${pace?pc(3600/sv)+' /km':f1(sv)+' km/h'}`};
- svg.onpointermove=mv;svg.onpointerdown=mv;const pbx=$('#pacebox'),showPace=()=>{pbx.innerHTML='';if(S.pace)kmBars(pbx,a,W,m)};svg.onclick=()=>{S.pace=!S.pace;showPace()};showPace();svg.onpointerleave=()=>{cur.setAttribute('visibility','hidden');S.cursor=null;drawMap();ro.textContent='Fahre mit dem Finger oder der Maus über das Profil: der Punkt wandert auf der Karte mit. Tippen blendet das Tempo pro Kilometer ein oder aus.'}}
+ const mv=e=>{const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,dd=Math.max(0,Math.min(D1,(x-m.l)/(W-m.l-m.r)*D1));let lo=0,hi=n-1;while(lo<hi){const mid=lo+hi>>1;xs[mid]<dd?lo=mid+1:hi=mid}
+  cur.setAttribute('x1',X(lo));cur.setAttribute('x2',X(lo));cur.setAttribute('visibility','visible');if(a.w){S.cursor=lo;drawMap()}
+  const pace=a.sport==='run'||a.sport==='hike',sv=T.v[lo]*3.6,tt=Math.round(T.t[lo]),parts=[];
+  parts.push(`<b>${tx?Math.floor(tt/60)+':'+String(tt%60).padStart(2,'0')+' min':f1(T.d[lo]/1000)+' km'}</b>`);
+  if(T.ele)parts.push(f0(T.ele[lo])+' m');
+  if(!T.nohr)parts.push(f0(T.hr[lo])+' bpm');
+  if(!T.nov)parts.push(pace?pc(3600/sv)+' /km':f1(sv)+' km/h');
+  ro.innerHTML=parts.join(' · ')};
+ svg.onpointermove=mv;svg.onpointerdown=mv;const pbx=$('#pacebox'),showPace=()=>{pbx.innerHTML='';if(S.pace&&!tx)kmBars(pbx,a,W,m)};svg.onclick=()=>{if(tx)return;S.pace=!S.pace;showPace()};showPace();svg.onpointerleave=()=>{cur.setAttribute('visibility','hidden');if(a.w){S.cursor=null;drawMap()}ro.textContent=roHint(a)}}
 /* ---------- Trends ---------- */
 const MET={steps:{n:'Schritte',k:'steps',agg:'sum',u:''},dist:{n:'Distanz',k:'dist',agg:'sum',u:' km'},ascent:{n:'Aufstieg',k:'ascent',agg:'sum',u:' m'},dur:{n:'Dauer',k:'dur',agg:'sum',u:' h'},load:{n:'Trainingslast',k:'load',agg:'sum',u:''},rhr:{n:'Ruhepuls',k:'rhr',agg:'mean',u:' bpm'},hrv:{n:'HRV',k:'hrv',agg:'mean',u:' ms'},sleep:{n:'Schlafwert',k:'sleep',agg:'mean',u:''}};
 const VIS={week:7,month:30,quarter:90,year:26};
@@ -1163,9 +1301,19 @@ const draw=()=>{if(!$('#tc'))return;const B=ps.map(w=>buckets(w,S.metric)),wkS=S
  draw();const ro=new ResizeObserver(()=>{draw();doHeat()});ro.observe($('#tc'))}
 /* ---------- Live-Modus: echte Daten aus Home Assistant ---------- */
 let ACOV=0;
-const FD=self.FitnessData,UNAME={p1:'p1',p2:'p2'},PMATCH={p2:null};
+const FD=self.FitnessData,UNAME={p1:'p1',p2:'p2'},PUN={},PMATCH={p2:null};
+const puOf=w=>PUN[w]||UNAME[w];
+const SRCKEY='fitness-card-source';
+function srcStored(){try{const v=localStorage.getItem(SRCKEY);return v==='auto'||v==='personal'||v==='connect'?v:null}catch(e){return null}}
+let SRCCFG={};
+const SRCBYKEY='fitness-card-source-by';
+/* Wahl je Messwert auf diesem Gerät: {schlüssel: auto|personal|connect}; auto = der globalen Wahl folgen (schlägt source_by aus der Konfiguration) */
+function srcByStored(){try{const o=JSON.parse(localStorage.getItem(SRCBYKEY)||'{}'),r={};for(const[k,v]of Object.entries(o||{}))if(v==='auto'||v==='personal'||v==='connect')r[k]=v;return r}catch(e){return{}}}
+function srcRowMode(k){const o=srcByStored()[k];return o||(SRCCFG.source_by&&SRCCFG.source_by[k])||'auto'}
+function applySource(){const g=srcStored()||SRCCFG.source||'auto',by=Object.assign({},SRCCFG.source_by||{});for(const[k,v]of Object.entries(srcByStored()))by[k]=v==='auto'?g:v;FD.setSourceConfig({source:g,source_by:by})}
+const srcNow=()=>srcStored()||SRCCFG.source||'auto';
 function applyCfg(cfg){if(cfg.names){if(cfg.names.p1)PERS.p1.n=cfg.names.p1;if(cfg.names.p2)PERS.p2.n=cfg.names.p2}
- if(cfg.entities)Object.assign(UNAME,cfg.entities);PMATCH.p2=cfg.person_match&&cfg.person_match.p2?new RegExp(cfg.person_match.p2,'i'):null}
+ if(cfg.entities)Object.assign(UNAME,cfg.entities);if(cfg.personal_entities)Object.assign(PUN,cfg.personal_entities);SRCCFG={source:cfg.source,source_by:cfg.source_by};applySource();PMATCH.p2=cfg.person_match&&cfg.person_match.p2?new RegExp(cfg.person_match.p2,'i'):null}
 const whoOfName=s=>PMATCH.p2&&PMATCH.p2.test(s||'')?'p2':'p1';
 const slug=s=>String(s||'ort').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'ort';
 function mapLiveAct(w,a){
@@ -1197,7 +1345,7 @@ function detectJoint(list){
 async function loadLive(hass,cfg,who){
  HASSREF=hass;
  const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',todayAbs=FD.dayIndex(Date.now(),tz),srcs={},covs={};
- for(const w of who){srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w]),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}
+ for(const w of who){srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w],{personal:puOf(w)}),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}
  const froms=who.map(w=>covs[w].archiveEnabled?0:covs[w].recorderFrom).filter(x=>x!=null);
  if(!froms.length)throw new Error('Noch keine Garmin-Daten im Recorder');
  const off=Math.min(...froms);
@@ -1210,7 +1358,7 @@ async function loadLive(hass,cfg,who){
  ACOV=Math.max(0,Math.min(ND,dayOf(new Date(Date.now()-35*864e5))));
  for(const w of who){const d=DAILY[w]=buildDaily(raw[w].rows,ACTS.filter(a=>a.who===w),ACOV),L=d[d.length-1],last7=d.slice(-7),av=k=>{const v=last7.map(x=>x[k]).filter(isNum);return v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length):null};
   const st=hass.states&&hass.states['sensor.garmin_'+UNAME[w]+'_trainingsstatus'],stx=st&&st.state&&!['unknown','unavailable'].includes(st.state)?st.state:'';
-  const hw=hass.states&&hass.states['sensor.garmin_'+UNAME[w]+'_hrv_wochendurchschnitt'],hwv=hw&&parseFloat(hw.state);
+  const hwv=FD.pickState(hass.states||{},puOf(w),UNAME[w],'hrv_wochendurchschnitt').v;
   TODAYV[w]={steps:L.steps,goal:L.goal,bb:L.bb,rhr:L.rhr,rhr7:av('rhr'),hrv:L.hrv,hrvW:isNum(hwv)?hwv:av('hrv'),rlevel:null,rfac:[],sleep:L.sleep,stress:L.stress,ready:L.ready,status:stx.replace(/_/g,' ').toLowerCase().replace(/^./,c=>c.toUpperCase())||'–',vo2:L.vo2,kcal:L.kcal,slp:L.slp,deep:L.deep,light:L.light,rem:L.rem,awake:L.awake,need:L.need,sr:L.sr,sl:L.sl,sm:L.sm,sh:L.sh}}
  for(const k of Object.keys(ACW))delete ACW[k];
  await refreshLive(hass,who);
@@ -1219,7 +1367,7 @@ async function loadLive(hass,cfg,who){
 const nowHM=()=>new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
 function kmIndex(a,m){let d=a.tr?a.tr.d:a._cd;if(!d){const p=a.ll||[];d=[0];for(let i=1;i<p.length;i++){const la=(p[i][0]+p[i-1][0])/2*Math.PI/180;d.push(d[i-1]+Math.hypot((p[i][0]-p[i-1][0])*111320,(p[i][1]-p[i-1][1])*111320*Math.cos(la)))}
   const sc=d[d.length-1]?a.st.dist/d[d.length-1]:1;d=d.map(x=>x*sc);a._cd=d}
- return d.findIndex(x=>x>=m)}
+ const i=d.findIndex(x=>x>=m);return i>=0&&a.tr&&a.tr.wi?a.tr.wi[i]:i}
 /* Kartenkacheln (CARTO, wie die HA-Karte), nur im Live-Modus */
 let TILES=false,cfgRef=null;const TC=new Map();let tRaf=0;
 function tileImg(z,x,y,dark){const k=(dark?'d':'l')+z+'/'+x+'/'+y;let im=TC.get(k);
@@ -1243,10 +1391,11 @@ async function loadLiveTracks(hass,who){
   const tr=Object.values(hass.states).find(x=>x.entity_id.startsWith('device_tracker.garmin_inreach_relay_position_')&&at.person&&String((x.attributes||{}).friendly_name||'').includes(at.person));
   let pts=[],T=null,nopts=true;
   if(tr&&at.start){try{const h=await hass.callWS({type:'history/history_during_period',start_time:at.start,end_time:new Date().toISOString(),entity_ids:[tr.entity_id],include_start_time_state:false,significant_changes_only:false,minimal_response:false,no_attributes:false});
-   const rows=(h[tr.entity_id]||[]).map(x=>x.a||x.attributes).filter(a=>a&&a.latitude!=null);
+   const all=(h[tr.entity_id]||[]).map(x=>x.a||x.attributes).filter(a=>a),rows=all.filter(a=>a.latitude!=null);
    pts=rows.map(a=>[a.latitude,a.longitude]);
    const lt=rows.filter(a=>a.source==='livetrack'),mine=lt.filter(a=>!at.session_id||a.livetrack_session===at.session_id);
-   T=trFromRows(mine.length>=2?mine:lt);nopts=!lt.length}catch(_){}}
+   const la=all.filter(a=>a.source==='livetrack'),lm=la.filter(a=>!at.session_id||a.livetrack_session===at.session_id);
+   T=trFromRows(lm.length>=2?lm:la);nopts=!lt.length}catch(_){}}
   if(at.distance_m>0)nopts=false;
   if(!pts.length){const pe=hass.states['person.'+UNAME[w]],pa=pe&&pe.attributes,src=pa&&pa.latitude!=null?pa:(tr&&tr.attributes.latitude!=null?tr.attributes:null);if(src)pts=[[src.latitude,src.longitude]]} /* ohne Punkte: letzte Position der Person aus HA (Handy oder Garmin, was neuer ist), nicht die Garmin-Position */
   if(pts.length===1)pts=[pts[0],pts[0]];
@@ -1259,9 +1408,20 @@ async function loadLiveTracks(hass,who){
 /* Aktuelle Werte direkt aus den Sensoren (die Tageszeile aus dem Recorder hinkt hinterher) */
 const NOWK={steps:'schritte',bb:'body_battery',stress:'durchschnittliches_stresslevel',rhr:'ruhepuls',hrv:'hrv_letzte_nacht_durchschnitt',sleep:'schlafwert',ready:'trainingsbereitschaft',kcal:'kalorien',goal:'tagliches_schrittziel'};
 const NOWAT={};
+/* Teilwerte des Schlafwerts und Garmins Einordnung: gibt es nur bei der eigenen Integration */
+function readSleepx(st,w){if(FD.sourceMode('sleep')==='connect')return null;const pu=puOf(w),g=n=>st['sensor.'+pu+'_'+n],bad=['unknown','unavailable','invalid',''];
+ const sv=n=>{const e=g(n);return e&&e.state!=null&&!bad.includes(e.state)?String(e.state):null};
+ const pc=n=>{const e=g(n),v=e?parseFloat(e.state):NaN;if(!isFinite(v))return null;const a=e.attributes||{};return{v:Math.round(v),lo:isNum(a.optimalStart)?a.optimalStart:null,hi:isNum(a.optimalEnd)?a.optimalEnd:null}};
+ const o={dur:sv('schlafwert_dauer'),stress:sv('schlafwert_stress'),wake:sv('schlafwert_aufwachen'),rest:sv('schlafwert_unruhe'),fb:sv('schlaf_feedback'),ins:sv('schlaf_einblick'),st:{deep:pc('schlafwert_tiefschlaf'),rem:pc('schlafwert_rem'),light:pc('schlafwert_leichtschlaf')}};
+ return Object.entries(o).some(([k,v])=>k==='st'?Object.values(v).some(Boolean):v)?o:null}
+let ME=null;
+/* Quelle wechseln: Wahl merken, alles neu laden (Tageswerte, Verlauf) und Ansicht behalten */
+async function switchSource(m,key){try{if(key){const o=srcByStored();o[key]=m;localStorage.setItem(SRCBYKEY,JSON.stringify(o))}else localStorage.setItem(SRCKEY,m)}catch(e){}applySource();if(!LIVE||!HASSREF||!ME)return;
+ const keep={who:S.who,tab:S.tab,day:S.day};await startLive(HASSREF,cfgRef,ME);Object.assign(S,keep);render()}
 function applyNow(hass,who){const st=hass&&hass.states||{};for(const w of who){const T=TODAYV[w],d=DAILY[w]&&DAILY[w][ND];if(!T)continue;let lu=0;
- for(const [k,n] of Object.entries(NOWK)){const e=st['sensor.garmin_'+UNAME[w]+'_'+n];if(!e)continue;const v=parseFloat(e.state);if(!isFinite(v))continue;T[k]=Math.round(v);if(d)d[k]=Math.round(v);const t=Date.parse(e.last_updated||e.last_changed||'');if(isFinite(t)&&t>lu)lu=t}
- readReadiness(st,w,T);
+ T.src={};T.both={};for(const [k,n] of Object.entries(NOWK)){const rp=FD.pickState(st,puOf(w),UNAME[w],n,'personal'),rc=FD.pickState(st,puOf(w),UNAME[w],n,'connect');T.both[k]={personal:rp.src==='personal'&&rp.v!=null?Math.round(rp.v):null,connect:rc.v!=null?Math.round(rc.v):null};}
+ for(const [k,n] of Object.entries(NOWK)){const r=FD.pickState(st,puOf(w),UNAME[w],n,FD.sourceMode(k));if(r.v==null)continue;const e=r.e,v=r.v;T[k]=Math.round(v);T.src[k]=r.src;if(d)d[k]=Math.round(v);const t=Date.parse(e.last_updated||e.last_changed||'');if(isFinite(t)&&t>lu)lu=t}
+ readReadiness(st,w,T);T.sleepx=readSleepx(st,w);
  if(lu)NOWAT[w]=lu}}
 const standHM=w=>NOWAT[w]?new Date(NOWAT[w]).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):nowHM();
 async function refreshLive(hass,who){
@@ -1271,16 +1431,27 @@ async function refreshLive(hass,who){
  if(S&&S.sel&&!byId[S.sel])S.sel=null}
 /* Tagesverlauf aus dem HA-Recorder: Schritte je Stunde und Body Battery. Stress und Herzfrequenz liefert Garmin nicht als Tagesverlauf, dafür gibt es keine Kurve. */
 async function dayReal(w,di){const hass=HASSREF,out={};if(!hass||!hass.states)return out;
- const u=UNAME[w],t0=dAt(di).getTime(),t1=Math.min(Date.now(),t0+864e5),H=36e5;
- for(const [k,id] of [['steps','sensor.garmin_'+u+'_schritte'],['bb','sensor.garmin_'+u+'_body_battery']]){
-  try{const h=await hass.callWS({type:'history/history_during_period',start_time:new Date(t0).toISOString(),end_time:new Date(t1).toISOString(),entity_ids:[id],include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:true});
-   const rows=(h[id]||[]).map(x=>{const ts=x.lu!=null?x.lu*1000:x.lc!=null?x.lc*1000:Date.parse(x.last_updated||x.last_changed);return{t:Math.max(t0,ts),v:parseFloat(x.s!=null?x.s:x.state)}}).filter(x=>isFinite(x.t)&&isFinite(x.v)).sort((p,q)=>p.t-q.t);
-   if(!rows.length)continue;
-   const at=t=>{let v=null;for(const r of rows){if(r.t<=t)v=r.v;else break}return v},arr=Array(24).fill(null);
-   for(let i=0;i<24;i++){const a=t0+i*H,b=a+H;if(a>=t1)break;const e=at(Math.min(b,t1));
-    if(k==='steps'){if(e==null)continue;const p=at(a);let d=p==null?e:e-p;if(d<0)d=e;arr[i]=Math.round(d)}
-    else{const inH=rows.filter(r=>r.t>=a&&r.t<b).map(r=>r.v);const v=inH.length?inH.reduce((x,y)=>x+y,0)/inH.length:e;if(v!=null)arr[i]=v}}
-   out[k]=arr}catch(e){}}
+ const u=UNAME[w],pu=puOf(w),t0=dAt(di).getTime(),t1=Math.min(Date.now(),t0+864e5),H=36e5,mode=FD.sourceMode;
+ const hist=(id,attrs)=>hass.callWS({type:'history/history_during_period',start_time:new Date(t0).toISOString(),end_time:new Date(t1).toISOString(),entity_ids:[id],include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:!attrs}).then(h=>h[id]||[]);
+ const tsOf=x=>x.lu!=null?x.lu*1000:x.lc!=null?x.lc*1000:Date.parse(x.last_updated||x.last_changed);
+ /* Stundenwerte: Schritte (Zuwachs je Stunde) und Body Battery (Mittel je Stunde). Kandidaten nach Quellenwahl, der erste mit brauchbaren Daten gewinnt */
+ for(const [k,name] of [['steps','schritte'],['bb','body_battery']]){
+  for(const id of FD.candidateIds(hass.states,pu,u,name,mode(k))){
+   try{const rows=(await hist(id,false)).map(x=>({t:Math.max(t0,tsOf(x)),v:parseFloat(x.s!=null?x.s:x.state)})).filter(x=>isFinite(x.t)&&isFinite(x.v)).sort((p,q)=>p.t-q.t);
+    if(!rows.length)continue;
+    /* Schritte sind ein Tageszähler: beginnt die Aufzeichnung erst spät am Tag, wäre der erste Zuwachs falsch -> nächste Quelle */
+    if(k==='steps'&&rows[0].t>t0+2*H)continue;
+    const at=t=>{let v=null;for(const r of rows){if(r.t<=t)v=r.v;else break}return v},arr=Array(24).fill(null);
+    for(let i=0;i<24;i++){const a=t0+i*H,b=a+H;if(a>=t1)break;const e=at(Math.min(b,t1));
+     if(k==='steps'){if(e==null)continue;const p=at(a);let d=p==null?e:e-p;if(d<0)d=e;arr[i]=Math.round(d)}
+     else{const inH=rows.filter(r=>r.t>=a&&r.t<b).map(r=>r.v);const v=inH.length?inH.reduce((x,y)=>x+y,0)/inH.length:e;if(v!=null)arr[i]=v}}
+    out[k]=arr;break}catch(e){}}}
+ /* Dichte Verläufe (Minutentakt) gibt es nur bei der eigenen Integration; die Zeit steht im Attribut measured_at, sonst gilt der Zeitpunkt des Eintrags */
+ if(mode('bb')!=='connect'||mode('hr')!=='connect'){
+  for(const [k,name] of [['bbd','body_battery_verlauf'],['hrd','puls_verlauf']]){const id='sensor.'+pu+'_'+name;if(!hass.states[id])continue;
+   try{const seen=new Set(),pts=[];for(const x of await hist(id,true)){const at=x.a||x.attributes||{},t=at.measured_at?Date.parse(at.measured_at):tsOf(x),v=parseFloat(x.s!=null?x.s:x.state);
+     if(!isFinite(t)||!isFinite(v)||t<t0||t>t1||seen.has(t))continue;seen.add(t);pts.push([(t-t0)/H,v])}
+    pts.sort((p,q)=>p[0]-q[0]);if(pts.length>=4)out[k]=pts}catch(e){}}}
  return out}
 function liveBanner(){
  const ls=ACTS.filter(a=>a.live&&persons().includes(a.who));if(!ls.length)return'';
@@ -1369,32 +1540,49 @@ const trackerOf=(hass,w)=>Object.values(hass.states||{}).find(x=>x.entity_id.sta
 function climbOf(h){let g=0,l=0,ref=null;for(const x of h){if(ref==null){ref=x;continue}if(x-ref>=3){g+=x-ref;ref=x}else if(ref-x>=3){l+=ref-x;ref=x}}return{gain:Math.round(g),loss:Math.round(l)}}
 function hav(a,b,c,d){const r=Math.PI/180,p=(c-a)*r/2,q=(d-b)*r/2,h=Math.sin(p)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(q)**2;return 12742000*Math.asin(Math.min(1,Math.sqrt(h)))}
 function trFromRows(rows){
- const R=rows.filter(a=>a&&a.latitude!=null&&a.longitude!=null&&a.sent_at).map(a=>({t:Date.parse(a.sent_at)/1000,a})).filter(r=>isFinite(r.t)).sort((x,y)=>x.t-y.t);
+ /* Ein Punkt gilt mit Zeit (sent_at) und mindestens einem Messwert (Höhe, Puls, Tempo oder Distanz); Position ist optional.
+    Nichts wird erfunden: was im Verlauf fehlt, wird nicht gezeichnet (nohr, nov, nod, ele=null). */
+ const meas=a=>a.altitude_m!=null||a.elevation_m!=null||a.heart_rate>0||a.speed_ms!=null||a.speed_kmh!=null||a.distance_m!=null;
+ const R=rows.filter(a=>a&&a.sent_at&&meas(a)).map(a=>({t:Date.parse(a.sent_at)/1000,a})).filter(r=>isFinite(r.t)).sort((x,y)=>x.t-y.t);
  const U=[];for(const r of R)if(!U.length||r.t>U[U.length-1].t)U.push(r);
  if(U.length<2)return null;
  const step=Math.ceil(U.length/1500),P=step>1?U.filter((_,i)=>i%step===0||i===U.length-1):U;
- if(P.filter(r=>r.a.altitude_m!=null||r.a.elevation_m!=null).length<P.length*.5)return null;
- const t0=P[0].t,lat=[],lon=[],ele=[],hr=[],v=[],d=[],t=[];let le=null,lh=0,dd=0,anyHR=false;
- P.forEach((r,i)=>{const a=r.a;lat.push(a.latitude);lon.push(a.longitude);t.push(r.t-t0);
+ const hasPos=a=>a.latitude!=null&&a.longitude!=null,npos=P.filter(r=>hasPos(r.a)).length,pos=npos>=2;
+ const hasEle=P.filter(r=>r.a.altitude_m!=null||r.a.elevation_m!=null).length>=P.length*.5; /* wie bisher: mindestens die Hälfte der Punkte */
+ const anyD=P.some(r=>r.a.distance_m!=null),anyS=P.some(r=>r.a.speed_ms!=null||r.a.speed_kmh!=null),anyH=P.some(r=>r.a.heart_rate>0);
+ if(!hasEle&&!anyD&&!anyS&&!anyH)return null;
+ const t0=P[0].t,lat=[],lon=[],ele=[],hr=[],v=[],d=[],t=[];let le=null,lh=0,dd=0,pi=-1;
+ P.forEach((r,i)=>{const a=r.a,hp=pos&&hasPos(a);t.push(r.t-t0);lat.push(hp?a.latitude:null);lon.push(hp?a.longitude:null);
   const e=a.altitude_m!=null?a.altitude_m:a.elevation_m;if(e!=null)le=e;ele.push(le);
-  if(a.heart_rate>0){lh=a.heart_rate;anyHR=true}hr.push(lh);
-  if(a.distance_m!=null)dd=Math.max(dd,a.distance_m);else if(i)dd+=hav(lat[i-1],lon[i-1],a.latitude,a.longitude);d.push(dd);
+  if(a.heart_rate>0)lh=a.heart_rate;hr.push(lh);
+  if(a.distance_m!=null)dd=Math.max(dd,a.distance_m);else if(hp&&pi>=0)dd+=hav(lat[pi],lon[pi],a.latitude,a.longitude);if(hp)pi=i;d.push(dd);
   v.push(a.speed_ms!=null?a.speed_ms:a.speed_kmh!=null?a.speed_kmh/3.6:null)});
- const first=ele.find(x=>x!=null);for(let i=0;i<ele.length&&ele[i]==null;i++)ele[i]=first;
- for(let i=0;i<v.length;i++)if(v[i]==null){const a=Math.max(0,i-2),b=Math.min(v.length-1,i+2),dt=t[b]-t[a];v[i]=dt>0?Math.max(0,(d[b]-d[a])/dt):0}
- const T={lat,lon,ele,hr,v,d,t};if(!anyHR)T.nohr=true;return T}
+ const nod=!anyD&&!pos;
+ if(hasEle){const first=ele.find(x=>x!=null);for(let i=0;i<ele.length&&ele[i]==null;i++)ele[i]=first}
+ /* Tempo: gemeldeter Wert; fehlt er an einzelnen Punkten, kommt er aus Distanz und Zeit (nur mit echter Distanz), sonst gilt der letzte gemeldete Wert */
+ const nov=!anyS&&nod;let lv=null;
+ for(let i=0;i<v.length;i++){if(v[i]!=null){lv=v[i];continue}
+  if(nod){v[i]=lv!=null?lv:0;continue}
+  const a=Math.max(0,i-2),b=Math.min(v.length-1,i+2),dt=t[b]-t[a];v[i]=dt>0?Math.max(0,(d[b]-d[a])/dt):0}
+ const T={lat:pos?lat:null,lon:pos?lon:null,ele:hasEle?ele:null,hr,v,d:nod?t.map(()=>0):d,t,npos:pos?npos:0};
+ if(!anyH)T.nohr=true;if(nod)T.nod=true;if(nov)T.nov=true;return T}
 function applyTr(a,T,live){
- a.tr=T;a.ll=T.lat.map((la,i)=>[la,T.lon[i]]);a.w=a.ll.map(p=>W0(p[0],p[1]));a.gps=a.w.length>1;a._trd=1;
- const c=climbOf(T.ele),hrs=T.nohr?[]:T.hr.filter(x=>x>0),n=T.d.length-1;
- if(live){const dist=Math.max(a.st.dist||0,T.d[n]),dur=Math.max(a.st.dur||0,T.t[n]);
-  a.st=Object.assign({},a.st,{dist,dur,elapsed:dur,gain:c.gain,loss:c.loss,avgHR:hrs.length?hrs.reduce((x,y)=>x+y,0)/hrs.length:a.st.avgHR,maxHR:hrs.length?Math.max(...hrs):0,avgV:dur?dist/dur*3.6:0,maxV:Math.max(...T.v)*3.6})}
+ /* Karte nur mit Positionen; ohne Positionen bleibt, was die Aktivität schon hat (Route aus route_vereinfacht oder nichts) */
+ a.tr=T;a._trd=1;
+ if(T.lat&&T.npos>=2){const idx=[];T.lat.forEach((la,i)=>{if(la!=null)idx.push(i)});
+  a.ll=idx.map(i=>[T.lat[i],T.lon[i]]);a.w=a.ll.map(p=>W0(p[0],p[1]));a.gps=a.w.length>1;
+  if(idx.length<T.lat.length){/* Lücken in den Positionen: Profilpunkt ohne eigene Position zeigt die zuletzt bekannte, davor keine (-1) */
+   let k=-1,j=0;T.wi=T.t.map((_,i)=>{while(j<idx.length&&idx[j]<=i){k=j;j++}return k})}}
+ const c=T.ele?climbOf(T.ele):{gain:a.st.gain||0,loss:a.st.loss||0},hrs=T.nohr?[]:T.hr.filter(x=>x>0),n=T.d.length-1;
+ if(live){const dist=T.nod?(a.st.dist||0):Math.max(a.st.dist||0,T.d[n]),dur=Math.max(a.st.dur||0,T.t[n]);
+  a.st=Object.assign({},a.st,{dist,dur,elapsed:dur,gain:c.gain,loss:c.loss,avgHR:hrs.length?hrs.reduce((x,y)=>x+y,0)/hrs.length:a.st.avgHR,maxHR:hrs.length?Math.max(...hrs):0,avgV:dur?dist/dur*3.6:0,maxV:T.nov?(a.st.maxV||0):Math.max(...T.v)*3.6})}
  else{if(!(a.st.gain>0))a.st.gain=c.gain;if(!(a.st.loss>0))a.st.loss=c.loss;if(!(a.st.maxHR>0)&&hrs.length)a.st.maxHR=Math.max(...hrs)}}
-const needTr=a=>LIVE&&HASSREF&&!a.live&&!a.tr&&!a._trTried&&a.gps&&a.st&&a.st.dur>0;
+const needTr=a=>LIVE&&HASSREF&&!a.live&&!a.tr&&!a._trTried&&a.st&&a.st.dur>0;
 async function loadTr(a){
  a._trTried=true;const hass=HASSREF,ent=trackerOf(hass,a.who);if(!ent)return false;
  const t0=a.date.getTime(),t1=t0+a.st.dur*1000;
  try{const h=await hass.callWS({type:'history/history_during_period',start_time:new Date(t0-6e5).toISOString(),end_time:new Date(t1+9e5).toISOString(),entity_ids:[ent.entity_id],include_start_time_state:false,significant_changes_only:false,minimal_response:false,no_attributes:false});
-  const rows=(h[ent.entity_id]||[]).map(x=>x.a||x.attributes).filter(r=>r&&r.source==='livetrack'&&r.latitude!=null);
+  const rows=(h[ent.entity_id]||[]).map(x=>x.a||x.attributes).filter(r=>r&&r.source==='livetrack');
   const by={};for(const r of rows){const k=r.livetrack_session||'?';(by[k]=by[k]||[]).push(r)}
   const best=Object.values(by).sort((x,y)=>y.length-x.length)[0];if(!best||best.length<20)return false;
   const T=trFromRows(best);if(!T||T.t[T.t.length-1]<a.st.dur*.5)return false;
@@ -1403,7 +1591,7 @@ async function loadTr(a){
 /* ---------- Lang drücken auf eine Kachel: Datensatz im HA-Verlauf öffnen ---------- */
 const HLP={sleep:['schlafwert','gesamtschlafdauer','tiefschlaf','rem_schlaf'],rec:['hrv_letzte_nacht_durchschnitt','ruhepuls','body_battery'],act:['schritte','kalorien'],str:['durchschnittliches_stresslevel'],body:['gewicht','vo2max']};
 const HLM={steps:['schritte'],rhr:['ruhepuls'],hrv:['hrv_letzte_nacht_durchschnitt'],sleep:['schlafwert','gesamtschlafdauer']};
-function idsFor(ws,names){const ids=[];for(const x of ws)for(const n of names){const id='sensor.garmin_'+UNAME[x]+'_'+n;if(HASSREF.states&&HASSREF.states[id])ids.push(id)}return ids}
+function idsFor(ws,names){const ids=[],st=HASSREF.states||{};for(const x of ws)for(const n of names){const r=FD.pickState(st,puOf(x),UNAME[x],n),id=r.src==='personal'?FD.personalId(puOf(x),n):r.src==='connect'?FD.connectId(UNAME[x],n):FD.candidateIds(st,puOf(x),UNAME[x],n)[0];if(id&&st[id])ids.push(id)}return ids}
 function goHistory(ids,from,to){if(!ids.length)return false;const q=new URLSearchParams({entity_id:ids.join(','),start_date:from.toISOString(),end_date:to.toISOString()});history.pushState(null,'','/history?'+q.toString());window.dispatchEvent(new CustomEvent('location-changed',{detail:{replace:false}}));return true}
 function trendHistory(){
  if(!LIVE||!HASSREF||!S.thist)return false;const names=HLM[S.metric];if(!names)return false;
@@ -1444,7 +1632,7 @@ async function startLive(hass,cfg,me){
  const who=cfg.pair?['p1','p2']:[me];
  $('.demo').hidden=true;showMsg('Daten werden geladen …');
  try{await loadLive(hass,cfg,who)}catch(e){showMsg('Daten konnten nicht geladen werden: '+(e&&e.message||e));return false}
- LIVE=true;cfgRef=cfg;BM=cfg.basemap||(cfg.tiles===false?'none':'vector');TILES=false;initState();S.who=me;
+ LIVE=true;ME=me;cfgRef=cfg;BM=cfg.basemap||(cfg.tiles===false?'none':'vector');TILES=false;initState();S.who=me;
  WHO=who.map(k=>[k,PERS[k].n]);if(who.length>1)WHO.push(['both','Beide']);
  started=true;render();return true}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&SH)closeSheet()});
