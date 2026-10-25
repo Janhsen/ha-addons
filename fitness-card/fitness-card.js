@@ -1202,7 +1202,7 @@ function drawMap(){if(!mctx||!mW)return;const c=mctx;c.setTransform(dpr,0,0,dpr,
  if(sel&&sel.gps){path(c,sel);c.strokeStyle=css('--surface');c.lineWidth=8;c.stroke();c.strokeStyle=col(sel.who);c.lineWidth=4.5;c.stroke();const pj=jointOf(sel);if(pj&&pj.gps){path(c,pj);c.setLineDash([9,6]);c.strokeStyle=col(pj.who);c.lineWidth=3;c.stroke();c.setLineDash([])}
   const w=sel.w,n=w.length-1;ringAt(c,w[0],col(sel.who),6);dotAt(c,w[n],col(sel.who),7,true);if(sel.live)livePulse(c,w[n],col(sel.who));
   if(MV.z>=11){const every=MV.z>=13?1:5;c.font='600 10px -apple-system,system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';for(let k=every;k*1000<sel.st.dist;k+=every){const i=kmIndex(sel,k*1000);if(i<0)break;const x=sx(w[i][0]),y=sy(w[i][1]);c.fillStyle=css('--surface');c.beginPath();c.arc(x,y,9,0,7);c.fill();c.strokeStyle=col(sel.who);c.lineWidth=1.5;c.stroke();c.fillStyle=css('--text');c.fillText(k,x,y+.5)}}
-  if(S.cursor!=null){const ci=sel.tr&&sel.tr.wi?sel.tr.wi[S.cursor]:S.cursor,w2=sel.w[ci];if(w2)dotAt(c,w2,css('--text'),7,true)}}}
+  if(S.cursor!=null){const ci=sel.tr&&sel.tr.wi?sel.tr.wi[S.cursor]:S.cursor,w2=(sel.wc||sel.w)[ci];if(w2)dotAt(c,w2,css('--text'),7,true)}}}
 function path(c,a){c.beginPath();const s=MV.z<10?4:MV.z<12?2:1;for(let i=0;i<a.w.length;i+=s){const x=sx(a.w[i][0]),y=sy(a.w[i][1]);i?c.lineTo(x,y):c.moveTo(x,y)}const l=a.w[a.w.length-1];c.lineTo(sx(l[0]),sy(l[1]))}
 function ringAt(c,p,color,r){const x=sx(p[0]),y=sy(p[1]);c.fillStyle=css('--surface');c.beginPath();c.arc(x,y,r+2,0,7);c.fill();c.strokeStyle=color;c.lineWidth=3;c.beginPath();c.arc(x,y,r-1,0,7);c.stroke()}
 let liveRaf=0;
@@ -1704,7 +1704,12 @@ function applyTr(a,T,live){
  /* Karte nur mit Positionen; ohne Positionen bleibt, was die Aktivität schon hat (Route aus route_vereinfacht oder nichts) */
  a.tr=T;a._trd=1;
  if(T.lat&&T.npos>=2){const idx=[];T.lat.forEach((la,i)=>{if(la!=null)idx.push(i)});
-  a.ll=idx.map(i=>[T.lat[i],T.lon[i]]);a.w=a.ll.map(p=>W0(p[0],p[1]));a.gps=a.w.length>1;
+  const ll=idx.map(i=>[T.lat[i],T.lon[i]]),ww=ll.map(p=>W0(p[0],p[1]));
+  /* Deckt der Verlauf (LiveTrack) die Tour nicht vollständig ab (später gestartet, Lücken, früher beendet), bleibt die volle Route aus dem Routen-Sensor gezeichnet.
+     Der Verlauf liefert dann nur die Position für den Cursor im Profil (wc). */
+  let plen=0;for(let i=1;i<ll.length;i++)plen+=hav(ll[i-1][0],ll[i-1][1],ll[i][0],ll[i][1]);
+  const keep=!live&&a.w&&a.w.length>1&&a.st&&a.st.dist>0&&plen<a.st.dist*.97;
+  if(keep){a.wc=ww}else{a.ll=ll;a.w=ww;a.gps=a.w.length>1;a.wc=null}
   if(idx.length<T.lat.length){/* Lücken in den Positionen: Profilpunkt ohne eigene Position zeigt die zuletzt bekannte, davor keine (-1) */
    let k=-1,j=0;T.wi=T.t.map((_,i)=>{while(j<idx.length&&idx[j]<=i){k=j;j++}return k})}}
  const c=T.ele?climbOf(T.ele):{gain:a.st.gain||0,loss:a.st.loss||0},hrs=T.nohr?[]:T.hr.filter(x=>x>0),n=T.d.length-1;
