@@ -680,7 +680,7 @@ for(const w of['p1','p2']){const r=rng(w==='p1'?5:9),r2=rng(w==='p1'?77:78),T=TO
   if(la)T.last={id:la.id,aer:w==='p1'?1.1:2.4,ana:w==='p1'?1.2:0.4,load:w==='p1'?33:61}}}
 }
 /* ---------- Zustand ---------- */
-function initState(){S={tab:'heute',who:'p1',sel:null,sports:new Set(),range:null,play:false,day:ND,card:null,dspan:7,preset:'30',metric:'steps',span:'week',dtab:'profil',dmet:'hr',bedSel:null,cursor:null,view:null}}
+function initState(){S={tab:'heute',who:'p1',sel:null,sports:new Set(),range:null,play:false,day:ND,card:null,dspan:7,preset:'30',metric:'steps',span:'week',dtab:'profil',dmet:'hr',bedSel:null,heartSel:null,cursor:null,view:null}}
 const TABS=[['heute','Heute','sun','var(--tc-h)'],['tour','Touren','map','var(--tc-t)'],['trend','Trends','chart','var(--tc-s)']];
 let WHO=[['p1',PERS.p1.n],['p2',PERS.p2.n],['both','Beide (Test)']];
 function persons(){return S.who==='both'?['p1','p2']:[S.who]}
@@ -1458,38 +1458,47 @@ function bedCard(ps){const box=$('#bcard');if(!box)return;const n=S.span==='week
  pl.addEventListener('pointermove',e=>{if(e.buttons&&e.pointerType!=='touch'){box._kb=false;pick(at(e))}});
  pl.addEventListener('keydown',e=>{const cur=sel==='rec'?idx.length:sel-from,d={ArrowLeft:-1,ArrowRight:1}[e.key];let k=null;if(d)k=cur+d;else if(e.key==='Home')k=0;else if(e.key==='End')k=ns-1;if(k==null)return;e.preventDefault();box._kb=true;pick(k)})}
 /* Herz-Trends: Ruhepuls, Ruhepuls mit HRV, Tagesbereich Minimum bis Maximum (alles aus den Tageswerten, nichts berechnet ausser dem Durchschnitt der angezeigten Tage) */
-function heartCards(ps){const n=S.span==='week'?7:S.span==='month'?30:90,from=Math.max(0,ND-n+1),idx=[];for(let i=from;i<=ND;i++)idx.push(i);
- const row=(w,i)=>DAILY[w][i],W=Math.max(300,($('#hc1')?$('#hc1').clientWidth-32:0)||600),m={l:38,r:38,t:12,b:24},pw=W-m.l-m.r,h=150,H=m.t+h+m.b,X=k=>m.l+(k+.5)/idx.length*pw;
- const xl=()=>{const st=Math.ceil(idx.length/6);let g='';idx.forEach((i,k)=>{if(k%st===0||k===idx.length-1)g+=`<text x="${X(k)}" y="${H-6}" text-anchor="middle">${dfmt(dAt(i),{day:'numeric',month:'numeric'})}</text>`});return g};
- const axis=(vs,pad,step)=>{const lo=Math.floor((Math.min(...vs)-pad)/step)*step,hi=Math.ceil((Math.max(...vs)+pad)/step)*step;return{lo,hi,Y:v=>m.t+h-(v-lo)/(hi-lo)*h,ticks:(()=>{const t=[];for(let v=lo;v<=hi;v+=step)t.push(v);return t})()}};
- const line=(w,k,A,st)=>{let seg=[],g='';const fl=()=>{if(seg.length>1)g+=`<polyline points="${seg.join(' ')}" style="fill:none;stroke:${st};stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round"/>`;else if(seg.length===1){const[x,y]=seg[0].split(',');g+=`<circle cx="${x}" cy="${y}" r="2.4" style="fill:${st}"/>`}seg=[]};
-  idx.forEach((i,j)=>{const v=row(w,i)[k];if(!ok(v)){fl();return}seg.push(X(j).toFixed(1)+','+A.Y(v).toFixed(1))});fl();return g};
- const grid=(A,left,right,un)=>A.ticks.map(v=>`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${A.Y(v)}" y2="${A.Y(v)}"/>${left?`<text x="${m.l-6}" y="${A.Y(v)+4}" text-anchor="end">${v}</text>`:''}`).join('');
- const nm=w=>ps.length>1?`<span><i class="dot" style="background:var(${PERS[w].c});margin-right:6px"></i>${esc(PERS[w].n)}</span>`:'';
- const head=(id,t,sub)=>`<h2 class="h2">${t}</h2><div class="muted sm" style="margin:-6px 0 10px">${sub} (${n} Tage). Tage ohne Wert bleiben leer.</div>`;
+function heartCards(ps){const box=$('#hcard');if(!box)return;const n=S.span==='week'?7:S.span==='month'?30:90,from=Math.max(0,ND-n+1),idx=[];for(let i=from;i<=ND;i++)idx.push(i);
+ const col=w=>ps.length>1?`var(${PERS[w].c})`:'var(--c-heart)',row=(w,i)=>DAILY[w][i],ns=idx.length,hasR=d=>ok(d.hrmin)&&ok(d.hrmax)&&d.hrmax>=d.hrmin;
+ /* HRV-Schalter: Standard an, Wahl nur pro Gerät (localStorage, Fallback Speicher) */
+ if(S.heartHrv===undefined){let v=true;try{const q=localStorage.getItem('fitness-card-heart-hrv');if(q==='0')v=false}catch(e){}S.heartHrv=v}
+ const rv=ps.flatMap(w=>idx.map(i=>row(w,i).rhr).filter(ok)),hv=ps.flatMap(w=>idx.map(i=>row(w,i).hrv).filter(ok)),
+  mm=ps.flatMap(w=>idx.map(i=>row(w,i)).filter(hasR).flatMap(d=>[d.hrmin,d.hrmax])),anyMM=mm.length>0,showH=S.heartHrv&&hv.length>0;
+ const head=`<h2 class="h2">Herz</h2><div class="muted sm" style="margin:-6px 0 10px">Ruhepuls je Tag${anyMM?' mit Pulsbereich (niedrigster bis höchster Puls)':''}${hv.length?', dazu HRV':''} (${n} Tage). Tage ohne Wert bleiben leer. Tippe auf einen Tag oder wähle ihn mit den Pfeiltasten.</div>`;
+ if(!rv.length&&!anyMM){box.innerHTML=head+'<div class="muted">Keine Herzwerte im Verlauf.</div>';return}
+ const W=Math.max(300,box.clientWidth-32||600),m={l:38,r:showH?40:14,t:12,b:24},pw=W-m.l-m.r,h=190,H=m.t+h+m.b,colw=pw/ns,X=k=>m.l+(k+.5)/ns*pw;
+ const axis=(vs,pad,step)=>{const lo=Math.floor((Math.min(...vs)-pad)/step)*step,hi=Math.ceil((Math.max(...vs)+pad)/step)*step,t=[];for(let v=lo;v<=hi;v+=step)t.push(v);return{lo,hi,Y:v=>m.t+h-(v-lo)/(hi-lo)*h,ticks:t}};
+ const A=axis([...rv,...mm],3,anyMM?20:5),B=showH?axis(hv,3,10):null;
+ const kOf=i=>i-from;let sel=S.heartSel;if(!(Number.isInteger(sel)&&sel>=from&&sel<=ND))sel=ND;
+ const bw=Math.max(4,Math.min(18,colw*(ps.length>1?.34:.55))),off=pi=>ps.length>1?(pi?bw/2+1:-bw/2-1):0;
+ let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ruhepuls je Tag in bpm${anyMM?', Pulsbereich als Balken':''}${showH?', HRV in ms gestrichelt':''}">`;
+ g+=`<rect class="hsel" x="${m.l+kOf(sel)*colw}" y="${m.t}" width="${colw}" height="${h}" rx="4" style="fill:var(--surface2)"/>`;
+ A.ticks.forEach(v=>{g+=`<line class="g" x1="${m.l}" x2="${W-m.r}" y1="${A.Y(v)}" y2="${A.Y(v)}"/><text x="${m.l-6}" y="${A.Y(v)+4}" text-anchor="end">${v}</text>`});
+ if(B)B.ticks.forEach(v=>{g+=`<text x="${W-m.r+6}" y="${B.Y(v)+4}" style="fill:var(--text2)">${v}</text>`});
+ /* Pulsbereich: blasse Balken Minimum bis Maximum */
+ ps.forEach((w,pi)=>idx.forEach((i,j)=>{const d=row(w,i);if(!hasR(d))return;const y0=A.Y(d.hrmax),y1=A.Y(d.hrmin);g+=`<rect class="hbar" data-i="${i}" x="${X(j)+off(pi)-bw/2}" y="${y0}" width="${bw}" height="${Math.max(2,y1-y0)}" rx="${Math.min(4,bw/2)}" style="fill:${col(w)};opacity:.3"/>`}));
+ const line=(w,k,Ax,dash,sw)=>{let seg=[],o='';const fl=()=>{if(seg.length>1)o+=`<polyline class="${k==='rhr'?'hl':'hh'}" points="${seg.join(' ')}" style="fill:none;stroke:${col(w)};stroke-width:${sw};${dash?'stroke-dasharray:5 3;':''}stroke-linejoin:round;stroke-linecap:round"/>`;seg=[]};
+  idx.forEach((i,j)=>{const v=row(w,i)[k];if(!ok(v)){fl();return}seg.push(X(j).toFixed(1)+','+Ax.Y(v).toFixed(1))});fl();return o};
  const avgOf=(w,k)=>{const v=idx.map(i=>row(w,i)[k]).filter(ok);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null};
- /* 1: Ruhepuls-Verlauf */
- {const box=$('#hc1');if(box){const vals=ps.flatMap(w=>idx.map(i=>row(w,i).rhr).filter(ok));
-  if(!vals.length)box.innerHTML=head('hc1','Ruhepuls','Ruhepuls je Tag')+'<div class="muted">Keine Ruhepuls-Werte im Verlauf.</div>';
-  else{const A=axis(vals,2,5);let g=grid(A,true);
-   ps.forEach(w=>{const av=avgOf(w,'rhr');if(av!=null)g+=`<line class="bavg" x1="${m.l}" x2="${W-m.r}" y1="${A.Y(av)}" y2="${A.Y(av)}" style="stroke:var(${PERS[w].c});stroke-width:1;stroke-dasharray:2 4;opacity:.6"/>`;g+=line(w,'rhr',A,`var(${PERS[w].c})`)});
-   g+=xl();
-   box.innerHTML=head('hc1','Ruhepuls','Ruhepuls je Tag')+`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ruhepuls je Tag in bpm">${g}</svg><div class="lg bleg">${ps.map(w=>`<span>${nm(w)||'<i class="bsw" style="border-top:2px solid var(--c-heart)"></i>Ruhepuls'}${avgOf(w,'rhr')!=null?' Ø '+f0(avgOf(w,'rhr'))+' bpm':''}</span>`).join('')}<span><i class="bsw" style="border-top:2px dashed var(--text2)"></i>Durchschnitt</span></div>`}}}
- /* 2: Ruhepuls mit HRV, zwei Achsen */
- {const box=$('#hc2');if(box){const rv=ps.flatMap(w=>idx.map(i=>row(w,i).rhr).filter(ok)),hv=ps.flatMap(w=>idx.map(i=>row(w,i).hrv).filter(ok));
-  if(!rv.length||!hv.length)box.innerHTML=head('hc2','Ruhepuls und HRV','Ruhepuls (links) und HRV (rechts)')+'<div class="muted">Ruhepuls oder HRV fehlen im Verlauf.</div>';
-  else{const A=axis(rv,2,5),B=axis(hv,3,10);let g=grid(A,true);
-   B.ticks.forEach(v=>{g+=`<text x="${W-m.r+6}" y="${B.Y(v)+4}">${v}</text>`});
-   ps.forEach(w=>{g+=line(w,'rhr',A,`var(${PERS[w].c})`);g+=line(w,'hrv',B,`var(${PERS[w].c})`).replace(/stroke-width:1.8/g,'stroke-width:1.6;stroke-dasharray:5 3')});
-   g+=xl();
-   box.innerHTML=head('hc2','Ruhepuls und HRV','Ruhepuls (links, bpm) und HRV (rechts, ms)')+`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ruhepuls links in bpm und HRV rechts in ms je Tag">${g}</svg><div class="lg bleg">${ps.map(nm).join('')}<span><i class="bsw" style="border-top:2px solid var(--text)"></i>Ruhepuls (links)</span><span><i class="bsw" style="border-top:2px dashed var(--text)"></i>HRV (rechts)</span></div>`}}}
- /* 3: Puls-Tagesbereich */
- {const box=$('#hc3');if(box){const has=d=>ok(d.hrmin)&&ok(d.hrmax)&&d.hrmax>=d.hrmin,vals=ps.flatMap(w=>idx.map(i=>row(w,i)).filter(has).flatMap(d=>[d.hrmin,d.hrmax]));
-  if(!vals.length)box.innerHTML=head('hc3','Pulsbereich','Niedrigster bis höchster Puls je Tag')+'<div class="muted">Keine Minimum- und Maximum-Werte im Verlauf.</div>';
-  else{const A=axis([...vals,...ps.flatMap(w=>idx.map(i=>row(w,i).rhr).filter(ok))],3,20),colw=pw/idx.length,bw=Math.max(4,Math.min(18,colw*(ps.length>1?.34:.55))),off=pi=>ps.length>1?(pi?bw/2+1:-bw/2-1):0;let g=grid(A,true);
-   ps.forEach((w,pi)=>idx.forEach((i,j)=>{const d=row(w,i);if(!has(d))return;const x=X(j)+off(pi)-bw/2,y0=A.Y(d.hrmax),y1=A.Y(d.hrmin);g+=`<rect x="${x}" y="${y0}" width="${bw}" height="${Math.max(2,y1-y0)}" rx="${Math.min(4,bw/2)}" style="fill:var(${PERS[w].c});opacity:${i===ND?1:.6}"/>`;if(ok(d.rhr))g+=`<circle cx="${X(j)+off(pi)}" cy="${A.Y(d.rhr)}" r="${Math.max(2.2,Math.min(3.4,bw/3))}" style="fill:var(--surface);stroke:var(--text);stroke-width:1.3"/>`}));
-   g+=xl();
-   box.innerHTML=head('hc3','Pulsbereich','Niedrigster bis höchster Puls je Tag, Punkt = Ruhepuls')+`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Niedrigster bis höchster Puls je Tag in bpm, Punkt für den Ruhepuls">${g}</svg><div class="lg bleg">${ps.map(nm).join('')}<span><i class="bsw" style="background:var(--text2);height:9px;border-radius:3px"></i>Minimum bis Maximum</span><span><i class="dot" style="background:var(--surface);border:1.3px solid var(--text)"></i>Ruhepuls</span></div>`}}}}
+ ps.forEach((w,pi)=>{const av=avgOf(w,'rhr');if(av!=null)g+=`<line class="bavg" x1="${m.l}" x2="${W-m.r}" y1="${A.Y(av)}" y2="${A.Y(av)}" style="stroke:${col(w)};stroke-width:1;stroke-dasharray:2 4;opacity:.6"/>`;
+  g+=line(w,'rhr',A,false,1.8);
+  idx.forEach((i,j)=>{const v=row(w,i).rhr;if(ok(v))g+=`<circle class="hd" cx="${X(j)}" cy="${A.Y(v)}" r="${i===sel?4:2.6}" style="fill:${col(w)};stroke:var(--surface);stroke-width:1.4"/>`});
+  if(showH){g+=line(w,'hrv',B,true,1.5);idx.forEach((i,j)=>{const v=row(w,i).hrv;if(ok(v))g+=`<circle class="hv" cx="${X(j)}" cy="${B.Y(v)}" r="${i===sel?3.4:2}" style="fill:var(--surface);stroke:${col(w)};stroke-width:1.3"/>`})}});
+ const st=Math.ceil(ns/6);idx.forEach((i,j)=>{if(j%st===0||j===ns-1)g+=`<text x="${X(j)}" y="${H-6}" text-anchor="middle">${dfmt(dAt(i),{day:'numeric',month:'numeric'})}</text>`});
+ g+='</svg>';
+ const nm=w=>ps.length>1?`<span><i class="dot" style="background:${col(w)};margin-right:6px"></i>${esc(PERS[w].n)}</span>`:'';
+ const lg=`<div class="lg bleg">${ps.map(w=>`<span>${nm(w)||'<i class="bsw" style="border-top:2px solid var(--c-heart)"></i>Ruhepuls'}${avgOf(w,'rhr')!=null?' Ø '+f0(avgOf(w,'rhr'))+' bpm':''}</span>`).join('')}<span><i class="bsw" style="border-top:2px dashed var(--text2);opacity:.6"></i>Durchschnitt</span>${anyMM?`<span><i class="bsw" style="background:${ps.length>1?'var(--text2)':'var(--c-heart)'};opacity:.3;height:9px;border-radius:3px"></i>Minimum bis Maximum</span>`:''}${showH?`<span><i class="bsw" style="border-top:2px dashed ${ps.length>1?'var(--text)':'var(--c-heart)'}"></i>HRV (rechts)</span>`:''}</div>`;
+ const chip=hv.length?`<div class="chips" style="margin:8px 0 0"><button type="button" class="chip" id="hrvTog" aria-pressed="${S.heartHrv}">HRV</button></div>`:'';
+ const dt=dAt(sel),cur=sel-from,nav=t=>`<div class="bdh"><div style="font-weight:600">${t}</div><div class="bnav"><button type="button" class="ib" data-hn="-1" aria-label="Vorheriger Tag"${cur<=0?' disabled':''}>${ic('prev',20)}</button><button type="button" class="ib" data-hn="1" aria-label="Nächster Tag"${cur>=ns-1?' disabled':''}>${ic('next',20)}</button></div></div>`;
+ const rows=ps.map(w=>{const d=row(w,sel),mmT=hasR(d)?f0(d.hrmin)+'–'+f0(d.hrmax)+' bpm':'–';
+  return(ps.length>1?`<div class="sm" style="font-weight:600;margin:8px 0 2px">${nm(w)}</div>`:'')+`<div class="kv kvt"><div><b>${ok(d.rhr)?f0(d.rhr)+' bpm':'–'}</b><span>Ruhepuls</span></div>${anyMM?`<div><b>${mmT}</b><span>Niedrigster bis höchster</span></div>`:''}${hv.length?`<div><b>${ok(d.hrv)?f0(d.hrv)+' ms':'–'}</b><span>HRV</span></div>`:''}</div>`}).join('');
+ box.innerHTML=head+`<div class="bplot hplot" tabindex="0" role="group" aria-label="Herzwerte je Tag, mit Pfeiltasten einen Tag wählen">${g}</div>${lg}${chip}<div class="bdet" aria-live="polite">${nav(esc(dfmt(dt,{weekday:'long',day:'numeric',month:'long'})))}${rows}</div>`;
+ const pl=box.querySelector('.hplot'),pick=k=>{k=Math.max(0,Math.min(ns-1,k));S.heartSel=idx[k];heartCards(ps);const q=$('#hcard .hplot');if(q&&box._kb)q.focus()},at=e=>{const r=pl.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W;return Math.floor((x-m.l)/pw*ns)};
+ box.querySelectorAll('.bnav .ib').forEach(bt=>bt.addEventListener('click',()=>{const d=+bt.dataset.hn;box._kb=false;pick(cur+d);const q=$('#hcard .bnav .ib[data-hn="'+d+'"]');const f=q&&!q.disabled?q:$('#hcard .bnav .ib:not([disabled])');if(f)f.focus()}));
+ const tg=box.querySelector('#hrvTog');if(tg)tg.addEventListener('click',()=>{S.heartHrv=!S.heartHrv;try{localStorage.setItem('fitness-card-heart-hrv',S.heartHrv?'1':'0')}catch(e){}box._kb=false;heartCards(ps);const q=$('#hcard #hrvTog');if(q)q.focus()});
+ pl.addEventListener('pointerdown',e=>{box._kb=false;pick(at(e))});
+ pl.addEventListener('pointermove',e=>{if(e.buttons&&e.pointerType!=='touch'){box._kb=false;pick(at(e))}});
+ pl.addEventListener('keydown',e=>{const d={ArrowLeft:-1,ArrowRight:1}[e.key];let k=null;if(d)k=cur+d;else if(e.key==='Home')k=0;else if(e.key==='End')k=ns-1;if(k==null)return;e.preventDefault();box._kb=true;pick(k)})}
 function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
  const wk=ps.map(w=>{const a=weekSum(w,0),b=weekSum(w,7);return`<div class="card"><div class="who"><span class="dot" style="background:var(${PERS[w].c})"></span>${PERS[w].n}<span class="sm muted" style="margin-left:auto;font-weight:400">letzte 7 Tage gegen die 7 davor</span></div><div class="kv">${[['Distanz',uv(a.dist,' km'),dl(a.dist,b.dist)],['Aufstieg',uv(a.asc,' m'),dl(a.asc,b.asc)],['Dauer',uv(a.dur,' h',f1),dl(a.dur,b.dur)],['Aktivitäten',f0(a.n),ok(a.n)&&ok(b.n)?a.n-b.n:null]].map(([n,val,d],i)=>`<div><b>${val}</b><span>${n}</span><span class="delta">${d==null?'':(d>0?'+':'')+d+(i===3?'':' %')+' zur Vorwoche'}</span></div>`).join('')}</div></div>`}).join('');
  const sports=ps.map(w=>{const lo=ND-29,m={};for(const a of ACTS)if(a.who===w&&!a.live&&dayOf(a.date)>=lo&&ok((DAILY[w][dayOf(a.date)]||{}).dist))m[a.sport]=(m[a.sport]||0)+a.st.dur/3600;const e=Object.entries(m).sort((x,y)=>y[1]-x[1]),mx=Math.max(...e.map(x=>x[1]),1);
@@ -1502,9 +1511,7 @@ function vTrend(){const v=$('#view'),ps=persons(),M=MET[S.metric];
  <div class="tbar" style="margin-bottom:10px"><div class="seg" id="spans">${[['week','Woche'],['month','Monat'],['quarter','3 Monate'],['year','Jahr']].map(([k,n])=>`<button data-k="${k}" aria-pressed="${S.span===k}">${n}</button>`).join('')}</div><span class="muted sm" id="trange"></span></div>
  <div class="chartbox" id="tc"></div><div class="kv" id="tk" style="margin-top:14px"></div></section>
  <section class="card bedc" id="bcard"></section>
- <section class="card bedc" id="hc1"></section>
- <section class="card bedc" id="hc2"></section>
- <section class="card bedc" id="hc3"></section>
+ <section class="card bedc" id="hcard"></section>
  <div class="cols">${sports}</div><div class="cols">${load}</div>
  <section class="card" id="acard"></section>
  ${ps.length>1?recordsPairHtml():`<div class="cols">${recordsHtml(ps)}</div>`}
