@@ -2,9 +2,11 @@ name: recorder-db-mcp
 
 on:
   push:
+    branches: [main]
     paths: ["recorder-db-mcp/**", ".github/workflows/recorder-db-mcp.yml"]
   pull_request:
     paths: ["recorder-db-mcp/**"]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -47,3 +49,33 @@ jobs:
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: recorder-db-mcp/Dockerfile
+  image:
+    # Prebuilt image: Home Assistant downloads it (config.yaml `image:`) instead of building on the device.
+    needs: [test, dockerfile]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: v
+        run: echo "version=$(sed -n 's/^version: *\"\(.*\)\"/\1/p' recorder-db-mcp/config.yaml)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: recorder-db-mcp
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/janhsen/amd64-addon-recorder-db-mcp:${{ steps.v.outputs.version }}
+            ghcr.io/janhsen/amd64-addon-recorder-db-mcp:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/Janhsen/ha-addons
+            org.opencontainers.image.description=Recorder DB MCP (Home Assistant app)
