@@ -1,5 +1,5 @@
 name: Recorder DB MCP
-version: "0.5.2"
+version: "0.6.0"
 slug: recorder-db-mcp
 description: Read-only MCP server for the Home Assistant recorder database (PostgreSQL)
 url: https://github.com/Janhsen/ha-addons/tree/main/recorder-db-mcp

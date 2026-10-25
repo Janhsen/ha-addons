@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Neu: `state_durations` (Zeit je Zustand), `state_periods` (Zeiträume eines Zustands, z. B. Ausfälle) und `state_changes` (häufigste echte Zustandswechsel). Rein lesend, ohne Zwischenspeicher.
+- Warnhinweise in den Ergebnissen: unvollständiger heutiger Tag, Tage mit wenigen Stundenwerten (`daily` liefert jetzt die Spalte `hours`), 23-/25-Stunden-Tage, negative Zählerwerte, unterschiedlicher Reihenbeginn bei `compare`, „nicht verfügbar“ bei `latest` (Spalte `valid`) und `entity_history`. Neue Felder `generated_at`, `first_day`/`last_day`.
+- Zeiten in `latest`, `gaps` und `summary` tragen den UTC-Versatz (wichtig am Ende der Sommerzeit).
+- Überarbeitete Anweisungen für den Assistenten: Zusammenspiel mit dem Home-Assistant-Connector, Auswahl des Werkzeugs nach Fragetyp, Fallstricke im Schema (`states.entity_id` leer, „unavailable“ als Wert, Fensterfunktionen vor dem Filtern). Fehlermeldungen nennen jetzt das passende andere Werkzeug.
+- Keine Änderung an Sicherheit, Datenbankrolle oder Optionen.
+
 ## 0.5.2
 
 - Korrektur: `statistics` liefert ohne Zeitangabe jetzt die neuesten Zeilen (vorher die ältesten), wie `entity_history`; die Ausgabe bleibt nach Zeit aufsteigend sortiert.

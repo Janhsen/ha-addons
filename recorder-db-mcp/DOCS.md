@@ -83,7 +83,18 @@ Update von 0.3.x: Der Schlüssel in `secrets.yaml` wird nicht mehr gelesen. Die 
 | `gaps` | Fehlende Stunden oder Tage einer Reihe (Auflösung `auto`, `hour` oder `day`) |
 | `summary` | Überblick über einen Sensor der letzten N Tage: letzter Tag, Mittel, Min, Max, Vergleich zur Vorperiode |
 | `latest` | Letzter aufgezeichneter Wert mehrerer Entitäten in einem Aufruf (IDs oder `%`-Muster) |
+| `state_durations` | Wie lange war eine Entität in welchem Zustand (z. B. Licht an/aus/nicht verfügbar) im Zeitraum |
+| `state_periods` | Zeiträume (von–bis), in denen eine Entität durchgehend in einem Zustand war, z. B. Ausfälle |
+| `state_changes` | Welche Entitäten am häufigsten in einen Zustand wechselten (echte Wechsel, ohne Attribut-Updates und ohne Wechsel aus „nicht verfügbar“) |
 | `find_entities` | Entitäten/Statistiken nach Namensteil suchen |
 | `entity_history` | Zustandsverlauf einer Entität, optional mit Attributen |
 | `statistics` | Langzeit- (`hour`) oder Kurzzeitstatistik (`5minute`) eines Sensors |
 | `run_query` | Beliebige lesende SQL-Abfrage |
+
+## Hinweise in den Ergebnissen
+
+Die Statistik-Werkzeuge warnen jetzt im Ergebnis (`warnings` und strukturierte Felder), damit Zahlen nicht falsch gelesen werden:
+unvollständiger heutiger Tag (`partial_days`), Tage mit wenigen Stundenwerten (`low_coverage_days`, Spalte `hours` bei `daily`),
+Tage mit 23 oder 25 Stunden (`dst_days`), negative Zählerwerte (`negative_change_days`), unterschiedlicher Reihenbeginn bei
+`compare` (`series_first_day`) sowie „nicht verfügbar“/„unbekannt“ bei `latest` (Spalte `valid`) und `entity_history`
+(`unavailable_rows`). Zeiten tragen den UTC-Versatz (`+0100`/`+0200`). Alles bleibt rein lesend.
