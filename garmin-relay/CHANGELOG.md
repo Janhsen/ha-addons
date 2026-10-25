@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.110.2
+
+- LiveTrack: Wenn von einer Aufzeichnung nur ein kleiner Teil gespeichert ist (z. B. nur die letzte Minute eines 10-km-Laufs), zeigt die Karte keine übereinander gestapelten km-Marker und keine Splits mehr, das Profil läuft über die Zeit, und ein Hinweis nennt Garmins Gesamtwerte.
+
 ## 0.110.1
 
 - Einstellungen: Das Höchstalter der Positions-Tracker lässt sich jetzt unter Einstellungen → Darstellung und Daten → Standorte → Höchstalter ändern (Minuten, 0 = aus, Standard 60).
