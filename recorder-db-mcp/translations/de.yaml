@@ -1,9 +1,8 @@
 configuration:
-  secrets_key:
-    name: Schlüssel in secrets.yaml
+  db_url:
+    name: Datenbank-URL
     description: >-
-      Name des Eintrags in secrets.yaml mit der Verbindungs-URL einer nur-lesenden
-      PostgreSQL-Rolle, z. B. postgresql://leser:passwort@77b2833f-timescaledb/homeassistant
+      Verbindungs-URL einer nur-lesenden PostgreSQL-Rolle, z. B. postgresql://leser:passwort@77b2833f-timescaledb/homeassistant
   max_rows:
     name: Maximale Zeilen
     description: Obergrenze für die Zeilen pro Abfrage.
@@ -21,5 +20,8 @@ configuration:
   hide_404_log:
     name: 404-Zeilen im Protokoll ausblenden
     description: Blendet Zugriffe auf unbekannte Pfade (meist automatische Scanner) im Protokoll aus.
+  audit_log:
+    name: Aufrufe im Protokoll festhalten
+    description: Schreibt für jeden Werkzeugaufruf Name, Dauer, Ergebnis und gekürzte Parameter (auch SQL) ins Protokoll.
 network:
   8099/tcp: MCP-Endpunkt (Streamable HTTP unter geheimem Pfad)

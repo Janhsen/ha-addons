@@ -1,9 +1,8 @@
 configuration:
-  secrets_key:
-    name: Key in secrets.yaml
+  db_url:
+    name: Database URL
     description: >-
-      Name of the secrets.yaml entry holding the connection URL of a read-only
-      PostgreSQL role, e.g. postgresql://reader:password@77b2833f-timescaledb/homeassistant
+      Connection URL of a read-only PostgreSQL role, e.g. postgresql://reader:password@77b2833f-timescaledb/homeassistant
   max_rows:
     name: Maximum rows
     description: Upper limit of rows per query.
@@ -21,5 +20,8 @@ configuration:
   hide_404_log:
     name: Hide 404 lines in the log
     description: Hides requests to unknown paths (mostly automated scanners) in the log.
+  audit_log:
+    name: Log tool calls
+    description: Writes tool name, duration, result and shortened parameters (including SQL) of every call to the log.
 network:
   8099/tcp: MCP endpoint (streamable HTTP under a secret path)

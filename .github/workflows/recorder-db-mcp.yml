@@ -1,0 +1,49 @@
+name: recorder-db-mcp
+
+on:
+  push:
+    paths: ["recorder-db-mcp/**", ".github/workflows/recorder-db-mcp.yml"]
+  pull_request:
+    paths: ["recorder-db-mcp/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: ha
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r recorder-db-mcp/tests/requirements-dev.txt pip-audit bandit
+      - name: Prepare read-only role
+        env:
+          PGPASSWORD: admin
+        run: |
+          psql -h localhost -U postgres ha -c "CREATE ROLE claude_ro LOGIN PASSWORD 'ro'" \
+            -c "ALTER ROLE claude_ro SET default_transaction_read_only = on" \
+            -c "GRANT USAGE ON SCHEMA public TO claude_ro"
+      - name: Tests
+        env:
+          TEST_DB_URL: postgresql://claude_ro:ro@localhost:5432/ha
+        run: python -m pytest recorder-db-mcp/tests -q
+      - name: Dependency audit
+        run: pip-audit -r recorder-db-mcp/requirements.txt
+      - name: Static security check
+        run: bandit -q -r recorder-db-mcp/server.py -s B608
+  dockerfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: recorder-db-mcp/Dockerfile
