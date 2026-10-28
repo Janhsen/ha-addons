@@ -623,8 +623,8 @@ function gen(who){
   {const a=makeAct(who,n++,d,s,pl,Math.floor(r()*1e9),dist,gain);if(who==='p1'&&TIT[s]&&r()<.55){const L=TIT[s];a.sname=L[Math.floor(r()*L.length)]}out.push(a)}}
  if(who==='p1'){
   for(let i=out.length-1;i>=0;i--){const dd=dayOf(out[i].date);if(dd===dayOf(new Date(2026,9,20))||dd===dayOf(new Date(2026,9,16)))out.splice(i,1)}
-  {const a=makeAct('p1',n++,new Date(2026,9,20,17,49),'mtb','stg',777,36.48,669,'Musterstadt Mountainbiken');a.sname='Ein bunter Rad Mix';a.sx={ach:13,pr:5,gear:'Bike 1',dev:'Garmin fēnix 9 Pro',pow:170};out.push(a)}
-  {const a=makeAct('p1',n++,new Date(2026,9,16,11,25),'hike','dol',778,12.85,915,'Bergdorf Wandern');a.sname='Gipfelrunde';a.sx={ach:10,pr:7,dev:'Garmin fēnix 9 Pro',cad:53};out.push(a)}}
+  {const a=makeAct('p1',n++,new Date(2026,9,20,17,49),'mtb','stg',777,36.48,669,'Musterstadt Mountainbiken');a.sname='Ein bunter Rad Mix';a.sx={ach:13,pr:5,gear:'Bike 1',dev:'Garmin watch',pow:170};out.push(a)}
+  {const a=makeAct('p1',n++,new Date(2026,9,16,11,25),'hike','dol',778,12.85,915,'Bergdorf Wandern');a.sname='Gipfelrunde';a.sx={ach:10,pr:7,dev:'Garmin watch',cad:53};out.push(a)}}
  return out}
 function initDemo(){START=new Date(2026,0,1);TODAY=new Date(2026,9,21);ND=Math.round((TODAY-START)/D);OFF=0;LIVE=false;
 const JA=gen('p1'),KA=gen('p2'),JT=[];
@@ -638,15 +638,15 @@ const EX=[];
 {const r=rng(4242);
  {const N=150,t=[],d=[],hr=[],v=[];let dd=0,h=96;
   for(let i=0;i<=N;i++){const tt=i*16,blk=Math.floor(i/15),sp=i<12?7.5:i>N-10?7:(blk%2?12.8:9.6),vv=(sp+.3*Math.sin(i/3))/3.6;if(i)dd+=vv*16;t.push(tt);v.push(vv);d.push(dd);h+=((92+(sp-6)*13)-h)*.14+(r()-.5)*3;hr.push(h)}
-  const a={id:'jan_tm',who:'p1',date:new Date(2026,9,19,18,5),sport:'run',place:'stg',name:'Laufband',seed:1,dist:dd/1000,gain:0,gps:false};
+  const a={id:'p1_tm',who:'p1',date:new Date(2026,9,19,18,5),sport:'run',place:'stg',name:'Laufband',seed:1,dist:dd/1000,gain:0,gps:false};
   a.tr={ele:null,hr,v,d,t};a.zones=[0,0,0,0,0];
   a.st={dist:d[N],dur:t[N],gain:0,loss:0,avgHR:hr.reduce((x,y)=>x+y,0)/hr.length,maxHR:Math.max(...hr),kcal:t[N]/60*12,load:Math.round(t[N]/3600*Math.max(0,hr.reduce((x,y)=>x+y,0)/hr.length-70)*1.6),avgV:d[N]/t[N]*3.6};EX.push(a)}
  {const N=90,t=[],hr=[];let h=100;
   for(let i=0;i<=N;i++){t.push(i*20);const sp=i<10?0:(Math.floor(i/18)%2?1:.55);h+=((100+sp*62)-h)*.12+(r()-.5)*3;hr.push(h)}
-  const a={id:'kat_ct',who:'p2',date:new Date(2026,9,20,7,10),sport:'run',place:'stg',name:'Crosstrainer',seed:2,dist:0,gain:0,gps:false};
+  const a={id:'p2_ct',who:'p2',date:new Date(2026,9,20,7,10),sport:'run',place:'stg',name:'Crosstrainer',seed:2,dist:0,gain:0,gps:false};
   a.tr={ele:null,hr,v:t.map(()=>0),d:t.map(()=>0),t,nod:true,nov:true};a.zones=[0,0,0,0,0];
   const av=hr.reduce((x,y)=>x+y,0)/hr.length;a.st={dist:0,dur:t[N],gain:0,loss:0,avgHR:av,maxHR:Math.max(...hr),kcal:t[N]/60*9,load:Math.round(t[N]/3600*Math.max(0,av-70)*1.6),avgV:0};EX.push(a)}
- {const a=makeAct('p1','jan_ne',new Date(2026,9,17,16,40),'run','stg',555,6.4,0);a.tr.ele=null;a.st.gain=0;a.st.loss=0;EX.push(a)}}
+ {const a=makeAct('p1','p1_ne',new Date(2026,9,17,16,40),'run','stg',555,6.4,0);a.tr.ele=null;a.st.gain=0;a.st.loss=0;EX.push(a)}}
 ACTS=[...JA,...KA,...JT,...EX].sort((a,b)=>b.date-a.date);
 byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
 /* Tageswerte */

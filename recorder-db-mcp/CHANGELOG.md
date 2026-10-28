@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Beispieltext in der Beschreibung von `find_series` neutralisiert. Keine Änderung an Funktion, Sicherheit, Datenbankrolle oder Optionen.
+
 ## 0.6.0
 
 - Neu: `state_durations` (Zeit je Zustand), `state_periods` (Zeiträume eines Zustands, z. B. Ausfälle) und `state_changes` (häufigste echte Zustandswechsel). Rein lesend, ohne Zwischenspeicher.

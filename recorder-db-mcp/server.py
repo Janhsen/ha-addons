@@ -759,7 +759,7 @@ def _daily_rows(
 def find_series(pattern: str = "", limit: Annotated[int, Field(ge=1, le=1000)] = 100) -> dict[str, Any]:
     """Find sensors by id OR display name (case-insensitive, literal text), with owner/source and data coverage.
 
-    Searches statistic ids, display names (e.g. "Jan resting heart rate") and recorded entity ids.
+    Searches statistic ids, display names (e.g. "Alex resting heart rate") and recorded entity ids.
     Returns id, name, source, unit, has_history, has_statistics, first_day, last_day (Europe/Berlin)
     and the number of hourly statistic points. Use this first when the sensor id is unknown.
     """
