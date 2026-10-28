@@ -566,7 +566,7 @@ function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t
 const IC={warn:'<path d="M12 4 3 20h18L12 4z"/><path d="M12 10v4.5M12 17.4v.1"/>',sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',cmp:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',close:'<path d="M6 6l12 12M18 6L6 18"/>',mtb:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-8h5l3 8M10 8l3 8M9 6h3"/>',run:'<circle cx="14" cy="5" r="2"/><path d="M12 9l-3 3 3 2-2 5M12 9l4 2 3-1M12 14l4 1 1 4"/>',hike:'<path d="M3 19l6-10 4 6 2-3 6 7z"/>',ski:'<path d="M4 17l16-6M6 20l14-5"/><circle cx="9" cy="6" r="2"/><path d="M9 9l3 4"/>',swim:'<path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17M7 12l4-3 3 2"/><circle cx="16" cy="7" r="2"/>',yoga:'<circle cx="12" cy="5" r="2"/><path d="M12 8v5M7 20l5-7 5 7M6 11h12"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bolt:'<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',body:'<circle cx="12" cy="5.5" r="2"/><path d="M6 9h12M12 9v5M9 21l3-7 3 7"/>',calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',map:'<path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2zM9 4v14M15 6v14"/>',chart:'<path d="M5 20V10M12 20V4M19 20v-8"/>',play:'<path d="M8 5l11 7-11 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',send:'<path d="M4 12l16-8-6 16-3-7z"/>'};
 const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''}>${IC[n]}</svg>`;
 const SP={mtb:{n:'Mountainbike',k:'Mountainbiken',hr:131,v:15.5,kc:10},run:{n:'Laufen',k:'Laufen',hr:150,v:10.4,kc:13},hike:{n:'Wandern',k:'Wandern',hr:119,v:3.9,kc:7.5},ski:{n:'Snowboard',k:'Snowboarden',hr:122,v:14,kc:8},swim:{n:'Schwimmen',k:'Schwimmen',hr:128,v:1.8,kc:9},yoga:{n:'Yoga',k:'Yoga',hr:82,v:0,kc:3}};
-const PL={stg:{n:'Musterstadt',lat:48.52,lon:9.05,el:360,sp:3.5},dol:{n:'Bergdorf',lat:46.41,lon:11.60,el:1180,sp:3},cam:{n:'Campitello di Fassa',lat:46.47,lon:11.74,el:1450,sp:2},tri:{n:'Triest',lat:45.66,lon:13.78,el:60,sp:2},faa:{n:'Faaker See',lat:46.55,lon:13.93,el:560,sp:1},car:{n:'Carezza',lat:46.40,lon:11.58,el:1700,sp:2}};
+const PL={home:{n:'Musterstadt',lat:48.52,lon:-30.95,el:360,sp:3.5},mtn:{n:'Bergdorf',lat:46.41,lon:-28.40,el:1180,sp:3},alp:{n:'Hochtal',lat:46.47,lon:-28.26,el:1450,sp:2},coast:{n:'Küstenort',lat:45.66,lon:-26.22,el:60,sp:2},lake:{n:'Bergsee',lat:46.55,lon:-26.07,el:560,sp:1},pass:{n:'Passhöhe',lat:46.40,lon:-28.42,el:1700,sp:2}};
 const PERS={p1:{n:'Person 1',c:'--p1'},p2:{n:'Person 2',c:'--p2'}};
 const col=w=>css(PERS[w].c);
 let START,TODAY,ND,OFF=0,ACTS=[],byId={},TODAYV={},DAILY={},LIVE=false,S;
@@ -575,8 +575,8 @@ const dayOf=d=>Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Da
 /* ---------- Beispieldaten ---------- */
 const W0=(lat,lon)=>{const s=256,r=lat*Math.PI/180;return[(lon+180)/360*s,(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*s]};
 function placeFor(d,who,sport){const m=d.getMonth(),dd=d.getDate(),k=m*100+dd;
- if(k>=214&&k<=221)return'car';if(k>=808&&k<=812)return'faa';if(who==='p2'&&k>=905&&k<=909)return'tri';
- if(k>=926&&k<=1018)return sport==='mtb'?'cam':'dol';return'stg'}
+ if(k>=214&&k<=221)return'pass';if(k>=808&&k<=812)return'lake';if(who==='p2'&&k>=905&&k<=909)return'coast';
+ if(k>=926&&k<=1018)return sport==='mtb'?'alp':'mtn';return'home'}
 function makeAct(who,i,d,sport,place,seed,dist,gain,name){
  const r=rng(seed),P=PL[place];
  const a={id:who+i,who,date:d,sport,place,name:name||(P.n+' '+SP[sport].k),seed,dist,gain,gps:sport!=='yoga'};
@@ -619,12 +619,12 @@ function gen(who){
   if(who==='p1'&&k>=214&&k<=221&&s==='ski'&&r()<.2)s='hike';
   const pl=placeFor(d,who,s),q=r();
   const dist={mtb:18+q*26+(we?8:0),run:4.5+q*8.5,hike:8+q*7,ski:22+q*18,swim:.4+q*.4,yoga:0}[s];
-  const gain={mtb:dist*17,run:dist*8,hike:dist*68,ski:dist*80,swim:0,yoga:0}[s]*(pl==='stg'&&s!=='hike'?.8:1);
+  const gain={mtb:dist*17,run:dist*8,hike:dist*68,ski:dist*80,swim:0,yoga:0}[s]*(pl==='home'&&s!=='hike'?.8:1);
   {const a=makeAct(who,n++,d,s,pl,Math.floor(r()*1e9),dist,gain);if(who==='p1'&&TIT[s]&&r()<.55){const L=TIT[s];a.sname=L[Math.floor(r()*L.length)]}out.push(a)}}
  if(who==='p1'){
   for(let i=out.length-1;i>=0;i--){const dd=dayOf(out[i].date);if(dd===dayOf(new Date(2026,9,20))||dd===dayOf(new Date(2026,9,16)))out.splice(i,1)}
-  {const a=makeAct('p1',n++,new Date(2026,9,20,17,49),'mtb','stg',777,36.48,669,'Musterstadt Mountainbiken');a.sname='Ein bunter Rad Mix';a.sx={ach:13,pr:5,gear:'Bike 1',dev:'Garmin watch',pow:170};out.push(a)}
-  {const a=makeAct('p1',n++,new Date(2026,9,16,11,25),'hike','dol',778,12.85,915,'Bergdorf Wandern');a.sname='Gipfelrunde';a.sx={ach:10,pr:7,dev:'Garmin watch',cad:53};out.push(a)}}
+  {const a=makeAct('p1',n++,new Date(2026,9,20,17,49),'mtb','home',777,36.48,669,'Musterstadt Mountainbiken');a.sname='Ein bunter Rad Mix';a.sx={ach:13,pr:5,gear:'Bike 1',dev:'Garmin watch',pow:170};out.push(a)}
+  {const a=makeAct('p1',n++,new Date(2026,9,16,11,25),'hike','mtn',778,12.85,915,'Bergdorf Wandern');a.sname='Gipfelrunde';a.sx={ach:10,pr:7,dev:'Garmin watch',cad:53};out.push(a)}}
  return out}
 function initDemo(){START=new Date(2026,0,1);TODAY=new Date(2026,9,21);ND=Math.round((TODAY-START)/D);OFF=0;LIVE=false;
 const JA=gen('p1'),KA=gen('p2'),JT=[];
@@ -638,15 +638,15 @@ const EX=[];
 {const r=rng(4242);
  {const N=150,t=[],d=[],hr=[],v=[];let dd=0,h=96;
   for(let i=0;i<=N;i++){const tt=i*16,blk=Math.floor(i/15),sp=i<12?7.5:i>N-10?7:(blk%2?12.8:9.6),vv=(sp+.3*Math.sin(i/3))/3.6;if(i)dd+=vv*16;t.push(tt);v.push(vv);d.push(dd);h+=((92+(sp-6)*13)-h)*.14+(r()-.5)*3;hr.push(h)}
-  const a={id:'p1_tm',who:'p1',date:new Date(2026,9,19,18,5),sport:'run',place:'stg',name:'Laufband',seed:1,dist:dd/1000,gain:0,gps:false};
+  const a={id:'p1_tm',who:'p1',date:new Date(2026,9,19,18,5),sport:'run',place:'home',name:'Laufband',seed:1,dist:dd/1000,gain:0,gps:false};
   a.tr={ele:null,hr,v,d,t};a.zones=[0,0,0,0,0];
   a.st={dist:d[N],dur:t[N],gain:0,loss:0,avgHR:hr.reduce((x,y)=>x+y,0)/hr.length,maxHR:Math.max(...hr),kcal:t[N]/60*12,load:Math.round(t[N]/3600*Math.max(0,hr.reduce((x,y)=>x+y,0)/hr.length-70)*1.6),avgV:d[N]/t[N]*3.6};EX.push(a)}
  {const N=90,t=[],hr=[];let h=100;
   for(let i=0;i<=N;i++){t.push(i*20);const sp=i<10?0:(Math.floor(i/18)%2?1:.55);h+=((100+sp*62)-h)*.12+(r()-.5)*3;hr.push(h)}
-  const a={id:'p2_ct',who:'p2',date:new Date(2026,9,20,7,10),sport:'run',place:'stg',name:'Crosstrainer',seed:2,dist:0,gain:0,gps:false};
+  const a={id:'p2_ct',who:'p2',date:new Date(2026,9,20,7,10),sport:'run',place:'home',name:'Crosstrainer',seed:2,dist:0,gain:0,gps:false};
   a.tr={ele:null,hr,v:t.map(()=>0),d:t.map(()=>0),t,nod:true,nov:true};a.zones=[0,0,0,0,0];
   const av=hr.reduce((x,y)=>x+y,0)/hr.length;a.st={dist:0,dur:t[N],gain:0,loss:0,avgHR:av,maxHR:Math.max(...hr),kcal:t[N]/60*9,load:Math.round(t[N]/3600*Math.max(0,av-70)*1.6),avgV:0};EX.push(a)}
- {const a=makeAct('p1','p1_ne',new Date(2026,9,17,16,40),'run','stg',555,6.4,0);a.tr.ele=null;a.st.gain=0;a.st.loss=0;EX.push(a)}}
+ {const a=makeAct('p1','p1_ne',new Date(2026,9,17,16,40),'run','home',555,6.4,0);a.tr.ele=null;a.st.gain=0;a.st.loss=0;EX.push(a)}}
 ACTS=[...JA,...KA,...JT,...EX].sort((a,b)=>b.date-a.date);
 byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
 /* Tageswerte */
