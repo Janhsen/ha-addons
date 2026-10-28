@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.110.4
+
+- LiveTrack: Eine später komplett nachgeladene Strecke wird jetzt auch dann übernommen, wenn sie gleich viele Punkte hat, aber mehr von der Aufzeichnung abdeckt (gemessen an Garmins Gesamtzeit und -distanz).
+- LiveTrack: Der Merker, welche LiveTrack-Ereignisse schon gemeldet wurden, wird 24 Stunden nach dem Ende einer Aufzeichnung gelöscht, damit er bei langer Laufzeit nicht wächst.
+- Wartung: Gebaut mit Go 1.26.10 und aktualisierten Go-Bibliotheken; bekannte Sicherheitslücken lassen den Build jetzt fehlschlagen.
+
 ## 0.110.3
 
 - LiveTrack: Ist eine beendete Aufzeichnung nur teilweise gespeichert (gemessen an Garmins Gesamtzeit und -distanz), liest die App die Session nach 2 Minuten, 10 Minuten und einer Stunde noch einmal komplett bei Garmin und übernimmt die vollständige Strecke, sobald Garmin mehr Punkte liefert.
