@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  # Only the add-on with its own source. mcp-memory-service follows its upstream release
+  # through its own update workflow, so it is deliberately not listed here.
+  - package-ecosystem: pip
+    directory: /recorder-db-mcp
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directory: /recorder-db-mcp
+    schedule:
+      interval: monthly
