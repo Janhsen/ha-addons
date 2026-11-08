@@ -6,6 +6,6 @@ RUN chmod +x /usr/local/bin/ha-run.sh
 
 EXPOSE 8765
 
-# hadolint ignore=DL3002
+# hadolint ignore=DL3002,DL3066
 USER root
 ENTRYPOINT ["/usr/local/bin/ha-run.sh"]
