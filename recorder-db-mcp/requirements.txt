@@ -4,4 +4,4 @@ tzdata==2026.6
 starlette==1.10.0
 uvicorn==0.54.0
 pydantic==2.14.3
-anyio==4.15.1
+anyio==4.16.0
