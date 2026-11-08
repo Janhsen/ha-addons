@@ -10,7 +10,7 @@ Public Home Assistant add-on store repository (`https://github.com/Janhsen/ha-ad
 ## Layout
 - `garmin-relay/`: add-on metadata only (`config.yaml`, `DOCS.md`, `CHANGELOG.md`, `translations/`). These files are written by the release workflow of the add-on's source repository. **Do not edit them here.**
 - `recorder-db-mcp/`: full source of the Recorder DB MCP add-on (`server.py`, `Dockerfile`, `config.yaml`, `DOCS.md`, `CHANGELOG.md`, `translations/`, `tests/`).
-- `mcp-memory-service/`: wrapper add-on around the official upstream image (`Dockerfile` with pinned version, `run.sh`, `config.yaml`, `DOCS.md`, `CHANGELOG.md`, `translations/`). Workflows: `mcp-memory-service.yml` (hadolint, shellcheck, smoke test, image build) and `mcp-memory-service-update.yml` (daily upstream check, 5-day wait, PR for patch/minor, issue for major).
+- `mcp-memory-service/`: wrapper add-on around the official upstream image (`Dockerfile` with pinned version, `run.sh`, `config.yaml`, `DOCS.md`, `CHANGELOG.md`, `translations/`). Workflows: `mcp-memory-service.yml` (hadolint, shellcheck, smoke test, image build) and `mcp-memory-service-update.yml` (daily upstream check, 5-day wait, auto-merge of patch/minor after a green smoke test, issue for major).
 - `fitness-card/`: Lovelace custom card (`fitness-card.js`, loaded via jsDelivr with a fixed commit).
 - `.github/workflows/recorder-db-mcp.yml`: tests, `pip-audit`, `bandit`, `hadolint`, then the image build to `ghcr.io/janhsen/amd64-addon-recorder-db-mcp`.
 

@@ -48,4 +48,4 @@ client only receives a token after someone enters the `api_key` on the approval 
 
 `/data` (memories, OAuth database, signing keys) is included in Home Assistant backups. The
 downloaded model cache is excluded and fetched again when missing. Take a backup before updating;
-upstream schema changes are not reversible. Major upstream versions are not updated automatically.
+upstream schema changes are not reversible. Patch and minor upstream versions are merged automatically after a 5-day wait and a green smoke test; major versions are never updated automatically.
