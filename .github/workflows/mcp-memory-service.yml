@@ -69,7 +69,7 @@ jobs:
           r=urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8099/",headers={"X-Ingress-Path":"/api/hassio_ingress/test"}),timeout=10)
           b=r.read().decode()
           print(r.status, len(b))
-          sys.exit(0 if r.status==200 and '<base href="/api/hassio_ingress/test/">' in b else 1)'
+          sys.exit(0 if r.status==200 and "base href=\"/api/hassio_ingress/test/\"" in b else 1)'
           for i in $(seq 1 120); do
             if docker exec memtest python3 -c "$check"; then exit 0; fi
             sleep 3
