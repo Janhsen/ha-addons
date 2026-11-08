@@ -1,0 +1,27 @@
+configuration:
+  api_key:
+    name: API-Schlüssel
+    description: >-
+      Langer, zufälliger Schlüssel (mindestens 24 Zeichen). Du gibst ihn einmal auf der Freigabeseite ein, wenn du Claude oder ChatGPT verbindest. Ohne gültigen Schlüssel kommt niemand an die Erinnerungen.
+  public_url:
+    name: Öffentliche Adresse
+    description: >-
+      HTTPS-Adresse des Cloudflare-Tunnels, ohne /mcp am Ende, z. B. https://memory.example.com
+  embedding_model:
+    name: Embedding-Modell
+    description: >-
+      Modell für die semantische Suche. Das Standardmodell versteht Deutsch und Englisch. Nach einem Wechsel müssen vorhandene Erinnerungen neu eingebettet werden (siehe Dokumentation).
+  cors_origins:
+    name: Erlaubte Browser-Herkunft (CORS)
+    description: Kommagetrennte Liste der Webseiten, die den Dienst im Browser ansprechen dürfen.
+  access_token_minutes:
+    name: Lebensdauer Zugriffstoken (Minuten)
+    description: Kurze Lebensdauer ist sicherer; Claude erneuert das Token automatisch.
+  refresh_token_days:
+    name: Lebensdauer Erneuerungstoken (Tage)
+    description: Danach muss die Verbindung neu freigegeben werden.
+  log_level:
+    name: Log-Level
+    description: Ausführlichkeit des App-Protokolls.
+network:
+  8765/tcp: MCP-Endpunkt (Streamable HTTP, OAuth)

@@ -1,0 +1,27 @@
+configuration:
+  api_key:
+    name: API key
+    description: >-
+      Long random key (at least 24 characters). You enter it once on the approval page when you connect Claude or ChatGPT. Without a valid key nobody can reach the memories.
+  public_url:
+    name: Public URL
+    description: >-
+      HTTPS address of the Cloudflare tunnel, without a trailing /mcp, e.g. https://memory.example.com
+  embedding_model:
+    name: Embedding model
+    description: >-
+      Model for semantic search. The default understands German and English. After changing it, existing memories must be re-embedded (see documentation).
+  cors_origins:
+    name: Allowed browser origins (CORS)
+    description: Comma-separated list of websites allowed to call the service from a browser.
+  access_token_minutes:
+    name: Access token lifetime (minutes)
+    description: Shorter is safer; Claude renews the token automatically.
+  refresh_token_days:
+    name: Refresh token lifetime (days)
+    description: After this the connection has to be approved again.
+  log_level:
+    name: Log level
+    description: Verbosity of the add-on log.
+network:
+  8765/tcp: MCP endpoint (Streamable HTTP, OAuth)

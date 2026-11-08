@@ -1,0 +1,72 @@
+name: mcp-memory-service-update
+
+# Looks for a new upstream release, waits until it has been public for a few days, and opens a pull request.
+# Patch and minor versions get a pull request that the smoke test checks; major versions only get an issue.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+env:
+  UPSTREAM: doobidoo/mcp-memory-service
+  WAIT_DAYS: "5"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          read -r tag published < <(gh api "repos/$UPSTREAM/releases/latest" --jq '[.tag_name, .published_at] | @tsv')
+          new="${tag#v}"
+          cur=$(sed -n 's|^FROM doobidoo/mcp-memory-service:\([0-9.]*\)-slim|\1|p' mcp-memory-service/Dockerfile)
+          echo "current=$cur latest=$new published=$published"
+          [ "$new" = "$cur" ] && { echo "up to date"; exit 0; }
+          [ "$(printf '%s\n%s\n' "$cur" "$new" | sort -V | tail -1)" = "$new" ] || { echo "upstream not newer"; exit 0; }
+
+          age=$(( ( $(date +%s) - $(date -d "$published" +%s) ) / 86400 ))
+          [ "$age" -ge "$WAIT_DAYS" ] || { echo "release is only $age days old, waiting"; exit 0; }
+
+          docker manifest inspect "doobidoo/mcp-memory-service:${new}-slim" >/dev/null \
+            || { echo "slim image for $new not published yet"; exit 0; }
+
+          branch="update/mcp-memory-service-$new"
+          if [ "${new%%.*}" != "${cur%%.*}" ]; then
+            title="Upstream major release mcp-memory-service $new needs approval"
+            if ! gh issue list --state open --search "$title in:title" --json number --jq '.[0].number' | grep -q .; then
+              gh issue create --title "$title" \
+                --body "Upstream published $new (current: $cur). Major versions are not updated automatically. Read the upstream changelog and migration notes, then change the version in mcp-memory-service/Dockerfile and config.yaml by hand."
+            fi
+            exit 0
+          fi
+          gh pr list --head "$branch" --state all --json number --jq '.[0].number' | grep -q . && { echo "PR exists"; exit 0; }
+
+          sed -i "s|^FROM doobidoo/mcp-memory-service:.*|FROM doobidoo/mcp-memory-service:${new}-slim|" mcp-memory-service/Dockerfile
+          sed -i "s|^version: .*|version: \"${new}-1\"|" mcp-memory-service/config.yaml
+          python3 - "$new" <<'PY'
+          import sys
+          p = "mcp-memory-service/CHANGELOG.md"
+          s = open(p, encoding="utf-8").read()
+          entry = f"## {sys.argv[1]}-1\n\n- Upstream auf {sys.argv[1]} aktualisiert (automatisch vorgeschlagen, vom Smoke-Test geprüft).\n\n"
+          s = s.replace("# Änderungen\n\n", "# Änderungen\n\n" + entry, 1)
+          open(p, "w", encoding="utf-8").write(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "mcp-memory-service: upstream $new"
+          git push origin "$branch"
+          # Pushes with GITHUB_TOKEN do not start pull_request workflows, so start the smoke test explicitly.
+          gh workflow run mcp-memory-service.yml --ref "$branch"
+          gh pr create --title "mcp-memory-service: upstream $new" \
+            --body "Upstream release $new has been public for at least $WAIT_DAYS days. The smoke test was started on the branch (see Actions). Review the upstream changelog before merging: https://github.com/$UPSTREAM/releases/tag/v$new"

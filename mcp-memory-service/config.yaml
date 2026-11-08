@@ -1,0 +1,38 @@
+name: MCP Memory Service
+version: "12.7.0-1"
+slug: mcp-memory-service
+description: Self-hosted long-term memory for AI assistants (MCP, Streamable HTTP, OAuth)
+url: https://github.com/Janhsen/ha-addons/tree/main/mcp-memory-service
+# Prebuilt image from .github/workflows/mcp-memory-service.yml (amd64 only).
+# Enable only after the image exists on GHCR and the package is public:
+# image: ghcr.io/janhsen/{arch}-addon-mcp-memory-service
+arch:
+  - amd64
+startup: application
+boot: auto
+apparmor: true
+# Memories, OAuth database and signing keys live in /data and are part of backups.
+# Only the downloaded embedding model is excluded; it is fetched again when missing.
+backup_exclude:
+  - /data/cache
+ports:
+  8765/tcp: 9585
+ports_description:
+  8765/tcp: MCP endpoint (Streamable HTTP, OAuth)
+watchdog: tcp://[HOST]:[PORT:8765]
+options:
+  api_key: ""
+  public_url: ""
+  embedding_model: paraphrase-multilingual-MiniLM-L12-v2
+  cors_origins: https://claude.ai,https://claude.com
+  access_token_minutes: 60
+  refresh_token_days: 30
+  log_level: INFO
+schema:
+  api_key: password
+  public_url: str
+  embedding_model: str
+  cors_origins: str
+  access_token_minutes: int(5,1440)
+  refresh_token_days: int(1,365)
+  log_level: list(DEBUG|INFO|WARNING|ERROR)
