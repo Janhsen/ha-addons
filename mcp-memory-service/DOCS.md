@@ -12,14 +12,17 @@ SQLite below `/data`.
 
 ## Options
 
+Only `api_key` and `public_url` are needed. All other options are optional and hidden by default
+(toggle "Show unused optional configuration options"); the defaults below apply when they are not set.
+
 | Option | Meaning |
 |---|---|
 | `api_key` | Required, at least 24 characters. Entered once on the approval page of each client. |
 | `public_url` | Required. Public HTTPS address of the tunnel, without `/mcp`. Used as OAuth issuer. |
 | `embedding_model` | Default `paraphrase-multilingual-MiniLM-L12-v2` (German and English). |
-| `cors_origins` | Browser origins that may call the service. |
-| `access_token_minutes` / `refresh_token_days` | Token lifetimes. |
-| `log_level` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `cors_origins` | Default `https://claude.ai,https://claude.com`. Browser origins that may call the service. |
+| `access_token_minutes` / `refresh_token_days` | Default `60` minutes / `30` days. Token lifetimes. |
+| `log_level` | Default `INFO`. `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `dashboard` | Default `true`. Starts the upstream web dashboard and shows it in the sidebar (ingress). |
 | `consolidation` | Default `false`. Upstream autonomous consolidation (clustering, compression, associations) on its default schedule. |
 | `nli` | Default `false`. Upstream contradiction detection (heuristic backend). |
@@ -34,8 +37,9 @@ Changing `embedding_model` after memories exist requires re-embedding them with 
 With `dashboard` enabled the add-on starts upstream's HTTP server (`memory server --http`) on
 `127.0.0.1:8000` inside the container. It is not published as a port. Home Assistant shows it
 under **Memory** in the sidebar through ingress, so only logged-in Home Assistant users reach it.
-A small proxy in the add-on accepts connections only from the ingress gateway, rewrites absolute
-paths to the ingress prefix and sends the API key as bearer token, so no second login is needed.
+A small proxy in the add-on accepts connections only from the ingress gateway, sets the page's
+`<base href>` to the ingress prefix, allows Home Assistant to show the page in its iframe and sends
+the API key as bearer token, so no second login is needed.
 
 The dashboard is a second process on the same SQLite database (WAL mode). It needs extra memory
 for its own copy of the embedding model. If it is not needed, set `dashboard` to `false`.

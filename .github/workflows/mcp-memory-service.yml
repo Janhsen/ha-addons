@@ -32,14 +32,11 @@ jobs:
         run: |
           mkdir -p /tmp/d0 && echo '{"api_key":"short","public_url":"https://memory.example.test"}' > /tmp/d0/options.json
           if docker run --rm -v /tmp/d0:/data addon-test; then echo "start without a valid key succeeded"; exit 1; fi
-      - name: Start with valid options
+      - name: Start with only the required options (plug and play)
         run: |
           mkdir -p /tmp/d1
           cat > /tmp/d1/options.json <<'JSON'
-          {"api_key":"test-key-0123456789abcdefghij","public_url":"https://memory.example.test",
-           "embedding_model":"paraphrase-multilingual-MiniLM-L12-v2",
-           "cors_origins":"https://claude.ai","access_token_minutes":60,
-           "refresh_token_days":30,"log_level":"INFO"}
+          {"api_key":"test-key-0123456789abcdefghij","public_url":"https://memory.example.test"}
           JSON
           docker run -d --name memtest -p 8765:8765 -v /tmp/d1:/data addon-test
           for i in $(seq 1 180); do
@@ -69,7 +66,9 @@ jobs:
           r=urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8099/",headers={"X-Ingress-Path":"/api/hassio_ingress/test"}),timeout=10)
           b=r.read().decode()
           print(r.status, len(b))
-          sys.exit(0 if r.status==200 and "base href=\"/api/hassio_ingress/test/\"" in b else 1)'
+          fa=r.headers.get("Content-Security-Policy","").split("frame-ancestors")[-1].split(";")[0]
+          print("frame-ancestors:", fa)
+          sys.exit(0 if r.status==200 and "base href=\"/api/hassio_ingress/test/\"" in b and "none" not in fa else 1)'
           for i in $(seq 1 120); do
             if docker exec memtest python3 -c "$check"; then exit 0; fi
             sleep 3

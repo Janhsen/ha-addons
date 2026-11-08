@@ -1,5 +1,5 @@
 name: MCP Memory Service
-version: "12.7.0-2"
+version: "12.7.0-3"
 slug: mcp-memory-service
 description: Self-hosted long-term memory for AI assistants (MCP, Streamable HTTP, OAuth)
 url: https://github.com/Janhsen/ha-addons/tree/main/mcp-memory-service
@@ -24,27 +24,19 @@ ports:
 ports_description:
   8765/tcp: MCP endpoint (Streamable HTTP, OAuth)
 watchdog: tcp://[HOST]:[PORT:8765]
+# Plug and play: only the two required values are shown. Everything else is optional
+# ("Show unused optional configuration options") and has a default in run.sh.
 options:
   api_key: ""
   public_url: ""
-  embedding_model: paraphrase-multilingual-MiniLM-L12-v2
-  cors_origins: https://claude.ai,https://claude.com
-  access_token_minutes: 60
-  refresh_token_days: 30
-  log_level: INFO
-  dashboard: true
-  consolidation: false
-  nli: false
-  bootstrap: false
-  agent_id: ""
 schema:
   api_key: password
   public_url: str
-  embedding_model: str
-  cors_origins: str
-  access_token_minutes: int(5,1440)
-  refresh_token_days: int(1,365)
-  log_level: list(DEBUG|INFO|WARNING|ERROR)
+  embedding_model: str?
+  cors_origins: str?
+  access_token_minutes: int(5,1440)?
+  refresh_token_days: int(1,365)?
+  log_level: list(DEBUG|INFO|WARNING|ERROR)?
   dashboard: bool?
   consolidation: bool?
   nli: bool?

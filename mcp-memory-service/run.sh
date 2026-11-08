@@ -5,8 +5,9 @@ set -euo pipefail
 
 OPTIONS=/data/options.json
 
+# opt NAME [DEFAULT]: value of an option, or DEFAULT when it is missing or empty.
 opt() {
-    python3 -c "import json,sys; print(json.load(open('$OPTIONS')).get(sys.argv[1], ''))" "$1"
+    python3 -c "import json,sys; v=json.load(open('$OPTIONS')).get(sys.argv[1]); print(sys.argv[2] if v in (None, '') else v)" "$1" "${2:-}"
 }
 
 optb() {
@@ -68,17 +69,17 @@ export MCP_OAUTH_STORAGE_BACKEND=sqlite
 export MCP_OAUTH_SQLITE_PATH=/data/oauth.db
 export MCP_OAUTH_PRIVATE_KEY_PATH=/data/oauth_private.pem
 export MCP_OAUTH_PUBLIC_KEY_PATH=/data/oauth_public.pem
-export MCP_OAUTH_ACCESS_TOKEN_EXPIRE_MINUTES="$(opt access_token_minutes)"
-export MCP_OAUTH_REFRESH_TOKEN_EXPIRE_DAYS="$(opt refresh_token_days)"
+export MCP_OAUTH_ACCESS_TOKEN_EXPIRE_MINUTES="$(opt access_token_minutes 60)"
+export MCP_OAUTH_REFRESH_TOKEN_EXPIRE_DAYS="$(opt refresh_token_days 30)"
 export MCP_ALLOW_ANONYMOUS_ACCESS=false
-export MCP_CORS_ORIGINS="$(opt cors_origins)"
+export MCP_CORS_ORIGINS="$(opt cors_origins https://claude.ai,https://claude.com)"
 
 export MCP_MEMORY_STORAGE_BACKEND=sqlite_vec
 export MCP_MEMORY_SQLITE_PATH=/data/sqlite_vec.db
 export MCP_MEMORY_BACKUPS_PATH=/data/backups
 export MCP_MEMORY_SQLITE_PRAGMAS="journal_mode=WAL,busy_timeout=15000"
-export MCP_EMBEDDING_MODEL="$(opt embedding_model)"
-export MCP_LOG_LEVEL="$(opt log_level)"
+export MCP_EMBEDDING_MODEL="$(opt embedding_model paraphrase-multilingual-MiniLM-L12-v2)"
+export MCP_LOG_LEVEL="$(opt log_level INFO)"
 
 export MCP_MDNS_ENABLED=false
 [ "$(optb consolidation false)" = "true" ] && export MCP_CONSOLIDATION_ENABLED=true

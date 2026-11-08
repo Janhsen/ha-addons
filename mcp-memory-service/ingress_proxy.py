@@ -3,7 +3,8 @@
 
 - Accepts connections only from the ingress gateway (and loopback for tests).
 - Adds the API key as bearer token, so the dashboard works without a second login.
-- Rewrites absolute paths in HTML, JavaScript and CSS to the ingress prefix (X-Ingress-Path).
+- Sets <base href> of the dashboard to the ingress prefix (X-Ingress-Path); upstream uses relative URLs.
+- Allows framing by Home Assistant (frame-ancestors 'self'), because ingress shows the page in an iframe.
 """
 import http.client
 import os
@@ -17,21 +18,24 @@ UPSTREAM_PORT = int(os.environ.get("INGRESS_UPSTREAM_PORT", "8000"))
 ALLOWED = {a.strip() for a in os.environ.get("INGRESS_ALLOWED", "172.30.32.2,127.0.0.1").split(",") if a.strip()}
 API_KEY = os.environ.get("MCP_API_KEY", "")
 
-REWRITE_TYPES = ("text/html", "text/css", "javascript", "application/json+ui")
+REWRITE_TYPES = ("text/html",)
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te",
               "trailers", "transfer-encoding", "upgrade", "content-length", "content-encoding"}
 
-# "/path" inside quotes or backticks, and url(/path); not "//host" and not a lone "/".
-QUOTED = re.compile(r"""(["'`])/(?=[A-Za-z0-9_.\-])""")
-CSS_URL = re.compile(r"url\(\s*(['\"]?)/(?=[A-Za-z0-9_.\-])")
 # Upstream serves the dashboard with <base href="/"> and relative URLs.
 BASE_HREF = re.compile(r"""(<base\s+href=["'])/(["'])""", re.IGNORECASE)
+FRAME_ANCESTORS = re.compile(r"frame-ancestors[^;]*", re.IGNORECASE)
+
+
+def frame_ok(csp: str) -> str:
+    """Home Assistant shows ingress pages in an iframe of the same origin."""
+    if FRAME_ANCESTORS.search(csp):
+        return FRAME_ANCESTORS.sub("frame-ancestors 'self'", csp)
+    return csp
 
 
 def rewrite(body: bytes, prefix: str) -> bytes:
     text = body.decode("utf-8", errors="replace")
-    text = QUOTED.sub(lambda m: f"{m.group(1)}{prefix}/", text)
-    text = CSS_URL.sub(lambda m: f"url({m.group(1)}{prefix}/", text)
     text = BASE_HREF.sub(lambda m: f"{m.group(1)}{prefix}/{m.group(2)}", text)
     return text.encode("utf-8")
 
@@ -67,7 +71,9 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             return
         ctype = (resp.getheader("Content-Type") or "").lower()
-        out_headers = [(k, v) for k, v in resp.getheaders() if k.lower() not in HOP_BY_HOP]
+        out_headers = [(k, frame_ok(v) if k.lower() == "content-security-policy" else v)
+                       for k, v in resp.getheaders()
+                       if k.lower() not in HOP_BY_HOP and k.lower() != "x-frame-options"]
         if prefix:
             out_headers = [(k, (prefix + v) if k.lower() == "location" and v.startswith("/") else v)
                            for k, v in out_headers]
