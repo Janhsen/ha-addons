@@ -1,7 +1,7 @@
 name: mcp-memory-service-update
 
 # Looks for a new upstream release, waits until it has been public for a few days, and opens a pull request.
-# Patch and minor versions get a pull request that the smoke test checks; major versions only get an issue.
+# Patch and minor versions are merged automatically when the smoke test passes; major versions only get an issue.
 on:
   schedule:
     - cron: "17 5 * * *"
@@ -20,6 +20,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Check upstream
@@ -66,7 +67,27 @@ jobs:
           git checkout -b "$branch"
           git commit -am "mcp-memory-service: upstream $new"
           git push origin "$branch"
-          # Pushes with GITHUB_TOKEN do not start pull_request workflows, so start the smoke test explicitly.
+          # Pushes with GITHUB_TOKEN do not start other workflows, so start the smoke test explicitly.
           gh workflow run mcp-memory-service.yml --ref "$branch"
-          gh pr create --title "mcp-memory-service: upstream $new" \
-            --body "Upstream release $new has been public for at least $WAIT_DAYS days. The smoke test was started on the branch (see Actions). Review the upstream changelog before merging: https://github.com/$UPSTREAM/releases/tag/v$new"
+          pr=$(gh pr create --title "mcp-memory-service: upstream $new" \
+            --body "Upstream release $new has been public for at least $WAIT_DAYS days. Merged automatically when the smoke test on this branch passes; otherwise this pull request stays open and the workflow run fails." \
+            | grep -o '[0-9]*$')
+
+          # Wait for the smoke test on the branch (patch/minor only reaches this point).
+          sleep 20
+          run=""
+          for _ in $(seq 1 60); do
+            read -r run status conclusion < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp-memory-service.yml/runs?branch=$branch&event=workflow_dispatch&per_page=1" \
+              --jq '.workflow_runs[0]|[.id,.status,(.conclusion//"-")]|@tsv')
+            [ "$status" = "completed" ] && break
+            sleep 30
+          done
+          if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
+            echo "Smoke test did not pass (status=$status conclusion=$conclusion); pull request #$pr stays open."
+            exit 1
+          fi
+
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$pr/merge" -f merge_method=squash >/dev/null
+          # A merge by GITHUB_TOKEN does not start the push workflow, so build the image explicitly.
+          gh workflow run mcp-memory-service.yml --ref main
+          echo "Merged #$pr and started the image build for $new."
