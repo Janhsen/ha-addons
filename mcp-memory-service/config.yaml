@@ -4,8 +4,8 @@ slug: mcp-memory-service
 description: Self-hosted long-term memory for AI assistants (MCP, Streamable HTTP, OAuth)
 url: https://github.com/Janhsen/ha-addons/tree/main/mcp-memory-service
 # Prebuilt image from .github/workflows/mcp-memory-service.yml (amd64 only).
-# Enable only after the image exists on GHCR and the package is public:
-# image: ghcr.io/janhsen/{arch}-addon-mcp-memory-service
+# Image exists on GHCR and the package is public:
+image: ghcr.io/janhsen/{arch}-addon-mcp-memory-service
 arch:
   - amd64
 startup: application
