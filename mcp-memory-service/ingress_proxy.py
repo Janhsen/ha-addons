@@ -24,12 +24,15 @@ HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authoriza
 # "/path" inside quotes or backticks, and url(/path); not "//host" and not a lone "/".
 QUOTED = re.compile(r"""(["'`])/(?=[A-Za-z0-9_.\-])""")
 CSS_URL = re.compile(r"url\(\s*(['\"]?)/(?=[A-Za-z0-9_.\-])")
+# Upstream serves the dashboard with <base href="/"> and relative URLs.
+BASE_HREF = re.compile(r"""(<base\s+href=["'])/(["'])""", re.IGNORECASE)
 
 
 def rewrite(body: bytes, prefix: str) -> bytes:
     text = body.decode("utf-8", errors="replace")
     text = QUOTED.sub(lambda m: f"{m.group(1)}{prefix}/", text)
     text = CSS_URL.sub(lambda m: f"url({m.group(1)}{prefix}/", text)
+    text = BASE_HREF.sub(lambda m: f"{m.group(1)}{prefix}/{m.group(2)}", text)
     return text.encode("utf-8")
 
 

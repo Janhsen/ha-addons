@@ -69,12 +69,20 @@ jobs:
           r=urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8099/",headers={"X-Ingress-Path":"/api/hassio_ingress/test"}),timeout=10)
           b=r.read().decode()
           print(r.status, len(b))
-          sys.exit(0 if r.status==200 and "/api/hassio_ingress/test/" in b else 1)'
+          sys.exit(0 if r.status==200 and '<base href="/api/hassio_ingress/test/">' in b else 1)'
           for i in $(seq 1 120); do
             if docker exec memtest python3 -c "$check"; then exit 0; fi
             sleep 3
           done
           exit 1
+      - name: Dashboard API through the proxy (informational)
+        run: |
+          docker exec memtest python3 -c 'import urllib.request
+          for p in ("/api/health","/api/memories?page=1&page_size=1"):
+              try:
+                  r=urllib.request.urlopen("http://127.0.0.1:8099"+p,timeout=20); print(p,r.status)
+              except Exception as e:
+                  print(p,e)' || true
       - name: Ingress proxy refuses other clients
         run: |
           ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' memtest)
