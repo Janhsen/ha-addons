@@ -12,7 +12,7 @@ jobs:
   dockerfile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: mcp-memory-service/Dockerfile
@@ -25,7 +25,7 @@ jobs:
     # Starts the real container with the add-on start script and checks the security-relevant behaviour.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: docker build -t addon-test mcp-memory-service
       - name: Start without key must fail
@@ -75,7 +75,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Read version
         id: v
         run: |
