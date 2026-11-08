@@ -1,5 +1,6 @@
 #!/bin/bash
 # Maps the Home Assistant add-on options to the environment of mcp-memory-service.
+# shellcheck disable=SC2155
 set -euo pipefail
 
 OPTIONS=/data/options.json

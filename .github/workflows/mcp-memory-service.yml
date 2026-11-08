@@ -41,7 +41,7 @@ jobs:
            "cors_origins":"https://claude.ai","access_token_minutes":60,
            "refresh_token_days":30,"log_level":"INFO"}
           JSON
-          docker run -d --name t -p 8765:8765 -v /tmp/d1:/data addon-test
+          docker run -d --name memtest -p 8765:8765 -v /tmp/d1:/data addon-test
           for i in $(seq 1 180); do
             if curl -fsS http://localhost:8765/.well-known/oauth-authorization-server -o /tmp/meta.json; then break; fi
             sleep 2
@@ -65,7 +65,7 @@ jobs:
         run: test -s /tmp/d1/oauth_private.pem
       - name: Log
         if: always()
-        run: docker logs t || true
+        run: docker logs memtest || true
 
   image:
     needs: [dockerfile, smoke]
