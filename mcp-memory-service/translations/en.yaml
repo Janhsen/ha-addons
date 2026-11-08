@@ -23,5 +23,20 @@ configuration:
   log_level:
     name: Log level
     description: Verbosity of the add-on log.
+  dashboard:
+    name: Dashboard in sidebar
+    description: Starts the upstream web dashboard and shows it in the Home Assistant sidebar (ingress only, never exposed through the tunnel).
+  consolidation:
+    name: Autonomous consolidation
+    description: Clustering, compression and associations of memories on the upstream default schedule.
+  nli:
+    name: Contradiction detection
+    description: Flags contradictions between new and similar existing memories (heuristic).
+  bootstrap:
+    name: Agent bootstrap profiles
+    description: Enables the get_bootstrap_profile tool for agents.
+  agent_id:
+    name: Agent ID
+    description: Optional default author id written to memories stored through MCP.
 network:
   8765/tcp: MCP endpoint (Streamable HTTP, OAuth)

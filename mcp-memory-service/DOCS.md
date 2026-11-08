@@ -20,9 +20,27 @@ SQLite below `/data`.
 | `cors_origins` | Browser origins that may call the service. |
 | `access_token_minutes` / `refresh_token_days` | Token lifetimes. |
 | `log_level` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `dashboard` | Default `true`. Starts the upstream web dashboard and shows it in the sidebar (ingress). |
+| `consolidation` | Default `false`. Upstream autonomous consolidation (clustering, compression, associations) on its default schedule. |
+| `nli` | Default `false`. Upstream contradiction detection (heuristic backend). |
+| `bootstrap` | Default `false`. Enables `get_bootstrap_profile` for agents. |
+| `agent_id` | Optional. Default author id written to memories stored through MCP. |
 
 Changing `embedding_model` after memories exist requires re-embedding them with upstream's
 `scripts/maintenance/regenerate_embeddings.py`; otherwise search quality drops.
+
+## Dashboard (sidebar)
+
+With `dashboard` enabled the add-on starts upstream's HTTP server (`memory server --http`) on
+`127.0.0.1:8000` inside the container. It is not published as a port. Home Assistant shows it
+under **Memory** in the sidebar through ingress, so only logged-in Home Assistant users reach it.
+A small proxy in the add-on accepts connections only from the ingress gateway, rewrites absolute
+paths to the ingress prefix and sends the API key as bearer token, so no second login is needed.
+
+The dashboard is a second process on the same SQLite database (WAL mode). It needs extra memory
+for its own copy of the embedding model. If it is not needed, set `dashboard` to `false`.
+Upstream features that need an external LLM, Cloudflare or a second instance (search summaries,
+quality scoring with a remote model, hybrid sync, reranking) are not exposed as options.
 
 ## Exposing it safely
 

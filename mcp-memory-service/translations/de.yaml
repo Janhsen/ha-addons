@@ -23,5 +23,20 @@ configuration:
   log_level:
     name: Log-Level
     description: Ausführlichkeit des App-Protokolls.
+  dashboard:
+    name: Dashboard in der Seitenleiste
+    description: Startet das Web-Dashboard von Upstream und zeigt es in der Home-Assistant-Seitenleiste (nur über Ingress, nie über den Tunnel).
+  consolidation:
+    name: Automatische Konsolidierung
+    description: Clustern, Verdichten und Verknüpfen von Erinnerungen nach dem Standardplan von Upstream.
+  nli:
+    name: Widerspruchserkennung
+    description: Markiert Widersprüche zwischen neuen und ähnlichen vorhandenen Erinnerungen (heuristisch).
+  bootstrap:
+    name: Bootstrap-Profile für Agenten
+    description: Schaltet das Werkzeug get_bootstrap_profile für Agenten frei.
+  agent_id:
+    name: Agent-ID
+    description: Optionale Standard-Autorenkennung für Erinnerungen, die über MCP gespeichert werden.
 network:
   8765/tcp: MCP-Endpunkt (Streamable HTTP, OAuth)

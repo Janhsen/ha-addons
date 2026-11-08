@@ -9,6 +9,10 @@ opt() {
     python3 -c "import json,sys; print(json.load(open('$OPTIONS')).get(sys.argv[1], ''))" "$1"
 }
 
+optb() {
+    python3 -c "import json,sys; v=json.load(open('$OPTIONS')).get(sys.argv[1]); print('true' if (sys.argv[2]=='true' if v is None else v) else 'false')" "$1" "$2"
+}
+
 API_KEY="$(opt api_key)"
 PUBLIC_URL="$(opt public_url)"
 
@@ -75,6 +79,25 @@ export MCP_MEMORY_BACKUPS_PATH=/data/backups
 export MCP_MEMORY_SQLITE_PRAGMAS="journal_mode=WAL,busy_timeout=15000"
 export MCP_EMBEDDING_MODEL="$(opt embedding_model)"
 export MCP_LOG_LEVEL="$(opt log_level)"
+
+export MCP_MDNS_ENABLED=false
+[ "$(optb consolidation false)" = "true" ] && export MCP_CONSOLIDATION_ENABLED=true
+[ "$(optb nli false)" = "true" ] && export MCP_NLI_ENABLED=true
+[ "$(optb bootstrap false)" = "true" ] && export MCP_BOOTSTRAP_ENABLED=true
+AGENT_ID="$(opt agent_id)"
+[ -n "$AGENT_ID" ] && export MCP_AGENT_ID="$AGENT_ID"
+
+# Optional dashboard: upstream HTTP server on loopback only, reached through the ingress proxy.
+if [ "$(optb dashboard true)" = "true" ]; then
+    if command -v memory >/dev/null 2>&1; then
+        echo "[INFO] Starting dashboard on 127.0.0.1:8000 and ingress proxy on :8099"
+        env -u MCP_MODE MCP_HTTP_ENABLED=true MCP_HTTP_HOST=127.0.0.1 MCP_HTTP_PORT=8000 \
+            memory server --http &
+        python3 /usr/local/bin/ingress_proxy.py &
+    else
+        echo "[WARN] 'memory' command not found, dashboard disabled" >&2
+    fi
+fi
 
 echo "[INFO] Issuer: ${MCP_OAUTH_ISSUER}, embedding model: ${MCP_EMBEDDING_MODEL}"
 exec /usr/local/bin/docker-entrypoint-unified.sh "$@"

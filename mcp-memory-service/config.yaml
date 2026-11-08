@@ -1,11 +1,15 @@
 name: MCP Memory Service
-version: "12.7.0-1"
+version: "12.7.0-2"
 slug: mcp-memory-service
 description: Self-hosted long-term memory for AI assistants (MCP, Streamable HTTP, OAuth)
 url: https://github.com/Janhsen/ha-addons/tree/main/mcp-memory-service
 # Prebuilt image from .github/workflows/mcp-memory-service.yml (amd64 only).
 # Image exists on GHCR and the package is public:
 image: ghcr.io/janhsen/{arch}-addon-mcp-memory-service
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:brain
+panel_title: Memory
 arch:
   - amd64
 startup: application
@@ -28,6 +32,11 @@ options:
   access_token_minutes: 60
   refresh_token_days: 30
   log_level: INFO
+  dashboard: true
+  consolidation: false
+  nli: false
+  bootstrap: false
+  agent_id: ""
 schema:
   api_key: password
   public_url: str
@@ -36,3 +45,8 @@ schema:
   access_token_minutes: int(5,1440)
   refresh_token_days: int(1,365)
   log_level: list(DEBUG|INFO|WARNING|ERROR)
+  dashboard: bool?
+  consolidation: bool?
+  nli: bool?
+  bootstrap: bool?
+  agent_id: str?

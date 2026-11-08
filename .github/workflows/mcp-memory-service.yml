@@ -63,6 +63,24 @@ jobs:
           test "$code" != "200" -a "$code" != "302"
       - name: Signing keys persist
         run: test -s /tmp/d1/oauth_private.pem
+      - name: Dashboard through the ingress proxy
+        run: |
+          check='import urllib.request,sys
+          r=urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8099/",headers={"X-Ingress-Path":"/api/hassio_ingress/test"}),timeout=10)
+          b=r.read().decode()
+          print(r.status, len(b))
+          sys.exit(0 if r.status==200 and "/api/hassio_ingress/test/" in b else 1)'
+          for i in $(seq 1 120); do
+            if docker exec memtest python3 -c "$check"; then exit 0; fi
+            sleep 3
+          done
+          exit 1
+      - name: Ingress proxy refuses other clients
+        run: |
+          ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' memtest)
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://$ip:8099/")
+          echo "status $code"
+          test "$code" = "403"
       - name: Log
         if: always()
         run: docker logs memtest || true
