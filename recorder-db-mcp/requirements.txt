@@ -1,5 +1,5 @@
 mcp==1.30.0
-psycopg[binary]==3.2.13
+psycopg[binary]==3.3.8
 tzdata==2025.2
 starlette==1.10.0
 uvicorn==0.54.0
