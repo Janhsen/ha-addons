@@ -1,0 +1,100 @@
+name: mcp-memory-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["mcp-memory-service/**", ".github/workflows/mcp-memory-service.yml"]
+  pull_request:
+    paths: ["mcp-memory-service/**"]
+  workflow_dispatch:
+
+jobs:
+  dockerfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: mcp-memory-service/Dockerfile
+      - name: Shell check
+        run: |
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck mcp-memory-service/run.sh
+
+  smoke:
+    # Starts the real container with the add-on start script and checks the security-relevant behaviour.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t addon-test mcp-memory-service
+      - name: Start without key must fail
+        run: |
+          mkdir -p /tmp/d0 && echo '{"api_key":"short","public_url":"https://memory.example.test"}' > /tmp/d0/options.json
+          if docker run --rm -v /tmp/d0:/data addon-test; then echo "start without a valid key succeeded"; exit 1; fi
+      - name: Start with valid options
+        run: |
+          mkdir -p /tmp/d1
+          cat > /tmp/d1/options.json <<'JSON'
+          {"api_key":"test-key-0123456789abcdefghij","public_url":"https://memory.example.test",
+           "embedding_model":"paraphrase-multilingual-MiniLM-L12-v2",
+           "cors_origins":"https://claude.ai","access_token_minutes":60,
+           "refresh_token_days":30,"log_level":"INFO"}
+          JSON
+          docker run -d --name memtest -p 8765:8765 -v /tmp/d1:/data addon-test
+          for i in $(seq 1 180); do
+            if curl -fsS http://localhost:8765/.well-known/oauth-authorization-server -o /tmp/meta.json; then break; fi
+            sleep 2
+          done
+          cat /tmp/meta.json
+          grep -q 'memory.example.test' /tmp/meta.json
+      - name: Anonymous MCP call is refused
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8765/mcp \
+            -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","method":"tools/list","id":1}')
+          echo "status $code"
+          test "$code" = "401" -o "$code" = "403"
+      - name: Wrong API key is refused on the approval page
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            'http://localhost:8765/oauth/authorize?response_type=code&client_id=x' -d 'api_key=wrong')
+          echo "status $code"
+          test "$code" != "200" -a "$code" != "302"
+      - name: Signing keys persist
+        run: test -s /tmp/d1/oauth_private.pem
+      - name: Log
+        if: always()
+        run: docker logs memtest || true
+
+  image:
+    needs: [dockerfile, smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: v
+        run: |
+          v=$(grep '^version:' mcp-memory-service/config.yaml | cut -d'"' -f2)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: mcp-memory-service
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/janhsen/amd64-addon-mcp-memory-service:${{ steps.v.outputs.version }}
+            ghcr.io/janhsen/amd64-addon-mcp-memory-service:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/Janhsen/ha-addons
+            org.opencontainers.image.description=MCP Memory Service (Home Assistant app)
