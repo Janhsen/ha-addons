@@ -7,6 +7,7 @@ if(customElements.get('fitness-card'))return;
 (function(root){
 'use strict';
 const START_UTC=Date.UTC(2026,0,1),DAY=864e5;
+let DAYSTATS=null; /* null = noch unbekannt, true = activity_archive/day_stats vorhanden, false = nicht vorhanden (alter Weg) */
 
 /* ---- Zeit ---- */
 const FMT_CACHE=new Map(); /* ein Formatter je Zeitzone: ihn pro Zeile neu zu bauen kostete ca. 2,4 s je Person */
@@ -112,7 +113,8 @@ function routesFromStates(states){const m=new Map();for(const x of states||[]){c
 function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',P='sensor.garmin_'+user+'_',PU=opt.personal||user,PP='sensor.'+PU+'_';
  const ws=msg=>hass.callWS(msg),cache=new Map(),memo=(k,f)=>{if(!cache.has(k))cache.set(k,f().catch(e=>{cache.delete(k);throw e}));return cache.get(k)};
  const stats=(ids,period,types,a,b)=>ws({type:'recorder/statistics_during_period',start_time:a,end_time:b,statistic_ids:ids,period,types});
- const hist=(ids,a,b)=>ws({type:'history/history_during_period',start_time:a,end_time:b,entity_ids:ids,include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:false});
+ /* na: ohne Attribute (Zustand und Zeit reichen; lastPerDay/tsPerDay liefern damit dieselben Werte, die Antwort ist ca. 10x kleiner) */
+ const hist=(ids,a,b,na)=>ws({type:'history/history_during_period',start_time:a,end_time:b,entity_ids:ids,include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:!!na});
  return{id:'recorder',user,tz,
   /* ältester Tag, für den der Recorder Garmin-Daten hat; davor liefert diese Quelle nichts */
   async coverage(){return memo('cov',async()=>{const mode=sourceMode('steps'),ids=mode==='personal'?[PP+'schritte']:mode==='connect'?[P+'schritte']:[PP+'schritte',P+'schritte'];const r=await stats(ids,'day',['state'],'2026-01-01T00:00:00Z',new Date().toISOString());let from=null;for(const id of ids){const rows=r[id]||[];if(rows.length){const d=dayIndex(rows[0].start,tz);if(from==null||d<from)from=d}}return{from}})},
@@ -122,17 +124,23 @@ function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.c
    const cands={};for(const[f,[id,k]]of Object.entries(FIELDS)){const m=sourceMode(f==='bed'||f==='wake'?'sleep':f),pn=PMAP[id],c={id:P+id,fac:1},pc=pn&&k!=='hist'?{id:PP+pn,fac:PSEC.has(id)?1/60:1}:null;
     cands[f]=m==='connect'||!pc?[c]:m==='personal'?[pc]:[pc,c];for(const x of cands[f])byKind[k].add(x.id)}
    const out=new Map();const put=(f,m,fac)=>{for(const[d,v0]of m){if(d<fromDay||d>toDay)continue;const o=out.get(d)||out.set(d,{day:d}).get(d);if(o[f]==null)o[f]=fac===1?v0:v0*fac}};
-   const[dayRows,hourRows,hRows]=await Promise.all([
+   /* Stundenwerte: wenn die Integration activity_archive den Befehl day_stats kennt, kommt je Tag ein Wert (ca. 1/22 der Daten, dieselben Zahlen);
+      sonst (unknown_command, Fehler) der bisherige Weg über die Stundenstatistik */
+   const hourTask=async()=>{if(!(byKind.last.size||byKind.mean.size))return{rows:{}};
+    if(DAYSTATS!==false)try{const r=await ws({type:'activity_archive/day_stats',start_time:a,end_time:b,last:[...byKind.last],mean:[...byKind.mean]});if(r&&r.last&&r.mean){DAYSTATS=true;return{ds:r}}}catch(e){if(e&&(e.code==='unknown_command'||e.code==='not_found'))DAYSTATS=false}
+    return{rows:await stats([...byKind.last,...byKind.mean],'hour',['mean','state'],a,b)}};
+   const[dayRows,hour,hRows]=await Promise.all([
     byKind.change.size?stats([...byKind.change],'day',['change'],a,b):{},
-    byKind.last.size||byKind.mean.size?stats([...byKind.last,...byKind.mean],'hour',['mean','state'],a,b):{},
-    byKind.hist.size||byKind.ts.size?hist([...byKind.hist,...byKind.ts],a,b):{}]);
-   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='ts'?tsPerDay(hRows[x.id],tz,f):k==='hist'?lastPerDay(hRows[x.id],tz):aggregateStats((k==='change'?dayRows:hourRows)[x.id],k,tz),x.fac);
+    hourTask(),
+    byKind.hist.size||byKind.ts.size?hist([...byKind.hist,...byKind.ts],a,b,true):{}]);
+   const dsMap=o=>{const m=new Map();for(const[ds,v]of Object.entries(o||{})){const[y,mo,d]=ds.split('-').map(Number);if(isFinite(v))m.set(Math.round((Date.UTC(y,mo-1,d)-START_UTC)/DAY),v)}return m};
+   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='ts'?tsPerDay(hRows[x.id],tz,f):k==='hist'?lastPerDay(hRows[x.id],tz):k==='change'?aggregateStats(dayRows[x.id],k,tz):hour.ds?dsMap(hour.ds[k][x.id]):aggregateStats(hour.rows[x.id],k,tz),x.fac);
    const days=[];for(let d=fromDay;d<=toDay;d++){const o=out.get(d)||{day:d};for(const f of Object.keys(FIELDS))if(o[f]==null)o[f]=null;
     o.light=o.light; days.push(o)}return days},
   /* Aktivitäten, aus Historie der Garmin-Sensoren; Routen verknüpft über aktivitaet_id */
-  async activities(fromDay,toDay){return memo('act',async()=>{const a=dayStartIso(0,tz),b=new Date().toISOString();
+  async activities(fromDay,toDay,o){const since=o&&o.since;return memo('act'+(since?'-'+Math.floor(since/6e4):''),async()=>{const a=dayStartIso(0,tz),b=new Date().toISOString();
    const ids=[P+'letzte_aktivitat',P+'letzte_aktivitaten',P+'route_vereinfacht'];
-   const h=await hist(ids,new Date(Date.now()-35*DAY).toISOString(),b);
+   const h=await hist(ids,new Date(Math.max(Date.now()-35*DAY,since||0)).toISOString(),b);
    const single=(h[P+'letzte_aktivitat']||[]).map(x=>x.a||x.attributes).filter(Boolean);
    const lists=[];for(const x of h[P+'letzte_aktivitaten']||[]){const at=x.a||x.attributes;if(at&&at.last_activities)lists.push(at.last_activities)}
    const routes=routesFromStates(h[P+'route_vereinfacht']);
@@ -155,11 +163,11 @@ async function combine(recorder,archive){
    const cur=b>=cut?await recorder.daily(Math.max(a,cut),b):[];
    const have=new Set([...old,...cur].map(x=>x.day)),fill=[];for(let d=a;d<=b;d++)if(!have.has(d)){const o={day:d};for(const f of Object.keys(FIELDS))o[f]=null;o.missing=true;fill.push(o)}
    return[...old,...fill,...cur].sort((x,y)=>x.day-y.day)},
-  async activities(a,b){let old=[];if(archive.enabled){try{old=await archive.activities(a,b)}catch(_){}}const cur=await recorder.activities(a,b),ids=new Set(old.map(x=>x.id));return[...old,...cur.filter(x=>!ids.has(x.id))].sort((x,y)=>y.date-x.date)},
+  async activities(a,b,o){let old=[];if(archive.enabled){try{old=await archive.activities(a,b)}catch(_){}}const cur=await recorder.activities(a,b,o),ids=new Set(old.map(x=>x.id));return[...old,...cur.filter(x=>!ids.has(x.id))].sort((x,y)=>y.date-x.date)},
   async dayCurve(d,k){return recorder.dayCurve(d,k)},
   async trackDetail(act){if(archive.enabled){try{return await archive.trackDetail(act)}catch(_){}}return null}}}
 
-const api={tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
+const api={get daystats(){return DAYSTATS},resetDaystats(){DAYSTATS=null},tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FitnessData=api;
 })(typeof self!=='undefined'?self:this);
 
@@ -558,9 +566,12 @@ const css=n=>getComputedStyle(host).getPropertyValue(n).trim();
 /* Lücken bleiben Lücken: fehlende Werte (null) werden als – gezeigt, nie ersetzt */
 const ok=v=>v!=null&&typeof v!=='boolean'&&isFinite(v),nn=a=>a.filter(ok);
 const sumA=a=>{const v=nn(a);return v.length?v.reduce((x,y)=>x+y,0):null},maxA=a=>{const v=nn(a);return v.length?Math.max(...v):null},minA=a=>{const v=nn(a);return v.length?Math.min(...v):null};
-const f0=n=>ok(n)?Math.round(n).toLocaleString('de-DE'):'–',f1=n=>ok(n)?n.toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';
+const NF0=new Intl.NumberFormat('de-DE'),NF1=new Intl.NumberFormat('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
+const f0=n=>ok(n)?NF0.format(Math.round(n)):'–',f1=n=>ok(n)?NF1.format(n):'–';
 const uv=(v,unit,f)=>ok(v)?(f||f0)(v)+unit:'–';
-const dfmt=(d,o)=>d.toLocaleDateString('de-DE',o);
+/* Formatter einmal je Optionssatz anlegen (jedes toLocaleDateString baut sonst einen neuen: bei einem Wechsel zu Trends ca. 40 % der Zeit); ohne Datumsfelder wie toLocaleDateString Jahr/Monat/Tag ergänzen */
+const DFC=new Map();
+const dfmt=(d,o)=>{const k=o?JSON.stringify(o):'';let f=DFC.get(k);if(!f){const oo=o&&(o.weekday||o.year||o.month||o.day)?o:Object.assign({year:'numeric',month:'numeric',day:'numeric'},o);DFC.set(k,f=new Intl.DateTimeFormat('de-DE',oo))}return f.format(d)};
 const hm=s=>{if(!ok(s))return'–';s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+':'+String(m).padStart(2,'0')+' h':m+' min'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -929,7 +940,7 @@ function sleepxHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleepx;if(!x)return'
  if(!q&&!st&&!tx)return'';
  return`<div class="sx2"><b>Teilwerte des Schlafwerts</b>${q}${st?`<div class="muted sm" style="margin-top:8px">Anteile der Nacht, grauer Bereich = Idealbereich</div>${st}`:''}${tx}${isLive()?'':'<div class="muted sm" style="margin-top:6px">Beispieldaten</div>'}</div>`}
 /* ---------- Runde 2: Schlafzeiten, HRV-Nacht, Stress-Zusatz, Wochenziel, Fitnessalter, Trainingseffekt, Pulszonen ---------- */
-const clk=ms=>new Date(ms).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+const TFC=new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'}),clk=ms=>TFC.format(new Date(ms));
 const exNote=()=>isLive()?'':'<div class="muted sm" style="margin-top:6px">Beispieldaten</div>';
 /* Schlafzeiten: ins Bett, aufgestanden, Zeit im Bett gegen Schlafdauer; Fenster von 18 Uhr am Vorabend bis 12 Uhr */
 function hintsHtml(w,di){const T=TODAYV[w];if(di!==ND||!T)return'';const nm=S.who==='both'?PERS[w].n+': ':'',o=[];
@@ -1530,7 +1541,8 @@ const draw=()=>{if(!$('#tc'))return;const B=ps.map(w=>buckets(w,S.metric)),wkS=S
    onWindow:(a,b)=>{S.twin=a;S.thist={from:dt(a),to:new Date(START.getTime()+B[0][b].b*D+D)};const L=b-a+1;$('#trange').textContent=dfmt(dt(a),{day:'numeric',month:'long'})+' bis '+dfmt(dAt(B[0][b].b),{day:'numeric',month:'long'})+(canopen?' · Balken antippen öffnet die Touren':'');
     $('#tk').innerHTML=ps.map((w,pi)=>{const vals=B[pi].slice(a,b+1).map(x=>x.v),prev=B[pi].slice(Math.max(0,a-L),a).map(x=>x.v),cur=M.agg==='sum'?sumA(vals):avgA(vals),pv=prev.length===L?(M.agg==='sum'?sumA(prev):avgA(prev)):null,d=dl(cur,pv);
      return`<div><b><span class="dot" style="background:var(${PERS[w].c});margin-right:6px"></span>${PERS[w].n}</b><span>${M.agg==='sum'?'Summe':'Durchschnitt'}</span></div><div><b>${uv(cur,M.u)}</b><span>im Zeitfenster</span></div><div><b>${uv(maxA(vals),M.u)}</b><span>Maximum</span></div><div><b>${d==null?'–':(d>=0?'+':'')+d+' %'}</b><span>gegen davor</span></div>`}).join('')}})};
- draw();const ro=new ResizeObserver(()=>{draw();doHeat()});ro.observe($('#tc'))}
+ draw();let lw=$('#tc').clientWidth;/* der erste ResizeObserver-Aufruf kommt immer: nur neu zeichnen, wenn sich die Breite wirklich geändert hat (halbiert den Aufbau) */
+ const ro=new ResizeObserver(()=>{const c=$('#tc'),w=c&&c.clientWidth;if(!c||w===lw)return;lw=w;draw();doHeat()});ro.observe($('#tc'))}
 /* ---------- Live-Modus: echte Daten aus Home Assistant ---------- */
 let ACOV=0;
 const FD=self.FitnessData,UNAME={p1:'p1',p2:'p2'},PUN={},PMATCH={p2:null};
@@ -1574,15 +1586,32 @@ function readReadiness(st,w,T){const e=st['sensor.garmin_'+UNAME[w]+'_trainingsb
 function detectJoint(list){
  for(const k of list.filter(a=>a.who==='p2'))for(const j of list.filter(a=>a.who==='p1')){
   if(k.sport===j.sport&&Math.abs(k.date-j.date)<30*6e4&&Math.abs(k.st.dist-j.st.dist)<=Math.max(300,j.st.dist*.15)){k.joint=j.id;break}}}
-async function loadLive(hass,cfg,who){
- HASSREF=hass;
+/* ---- Zwischenspeicher im Browser (IndexedDB): beim Öffnen sofort der letzte Stand, danach im Hintergrund aktualisieren ---- */
+const CACHE_V=1,CACHE_STORE='raw';
+function idbOpen(){return new Promise((ok,no)=>{try{const r=indexedDB.open('fitness-card',1);r.onupgradeneeded=()=>r.result.createObjectStore(CACHE_STORE);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}catch(e){no(e)}})}
+async function cacheGet(k){try{const db=await idbOpen();return await new Promise(ok=>{const q=db.transaction(CACHE_STORE).objectStore(CACHE_STORE).get(k);q.onsuccess=()=>{db.close();ok(q.result||null)};q.onerror=()=>{db.close();ok(null)}})}catch(e){return null}}
+async function cachePut(k,v){try{const db=await idbOpen();await new Promise(ok=>{const t=db.transaction(CACHE_STORE,'readwrite');t.objectStore(CACHE_STORE).put(v,k);t.oncomplete=()=>{db.close();ok()};t.onerror=t.onabort=()=>{db.close();ok()}})}catch(e){}}
+/* Schlüssel: Nutzer, Personenliste und Quellenwahl; ändert sich eins davon, gilt der alte Stand nicht */
+const cacheKey=(hass,who)=>[(hass.user&&hass.user.id)||'',who.join(','),JSON.stringify([srcNow(),srcByStored(),SRCCFG.source_by||{},UNAME,PUN])].join('|');
+const todayAbsOf=hass=>FD.dayIndex(Date.now(),(hass.config&&hass.config.time_zone)||'Europe/Berlin');
+const cacheValid=(c,hass,who)=>!!c&&c.v===CACHE_V&&c.todayAbs===todayAbsOf(hass)&&JSON.stringify(c.who)===JSON.stringify(who)&&c.raw&&who.every(w=>c.raw[w]&&c.raw[w].rows&&c.raw[w].acts);
+/* Rohdaten laden: beide Personen gleichzeitig. Mit prev (Stand von vorhin, am selben Tag, höchstens 3 h alt) nur die letzten 3 Tage und Aktivitäten der letzten 3 Tage nachladen und einmischen. */
+async function fetchRaw(hass,cfg,who,prev){
  const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',todayAbs=FD.dayIndex(Date.now(),tz),srcs={},covs={};
- for(const w of who){srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w],{personal:puOf(w)}),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}
+ await Promise.all(who.map(async w=>{srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w],{personal:puOf(w)}),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}));
  const froms=who.map(w=>covs[w].archiveEnabled?0:covs[w].recorderFrom).filter(x=>x!=null);
  if(!froms.length)throw new Error('Noch keine Garmin-Daten im Recorder');
- const off=Math.min(...froms);
- const raw={};for(const w of who){const[rows,acts]=await Promise.all([srcs[w].daily(off,todayAbs),srcs[w].activities(off,todayAbs)]);raw[w]={rows,acts}}
- /* in den Zustand schreiben */
+ const off=Math.min(...froms),now=Date.now();
+ const light=!!prev&&prev.off===off&&prev.todayAbs===todayAbs&&now-prev.fullAt<3*36e5&&JSON.stringify(prev.who)===JSON.stringify(who)&&who.every(w=>prev.raw[w]&&prev.raw[w].rows&&prev.raw[w].rows.length===todayAbs-off+1);
+ const from=Math.max(off,todayAbs-2),raw={};
+ await Promise.all(who.map(async w=>{
+  if(light){const[nr,na]=await Promise.all([srcs[w].daily(from,todayAbs),srcs[w].activities(off,todayAbs,{since:now-3*864e5})]),ids=new Set(na.map(a=>a.id));
+   raw[w]={rows:prev.raw[w].rows.slice(0,from-off).concat(nr),acts:prev.raw[w].acts.filter(a=>!ids.has(a.id)).concat(na).sort((x,y)=>y.date-x.date)}}
+  else{const[rows,acts]=await Promise.all([srcs[w].daily(off,todayAbs),srcs[w].activities(off,todayAbs)]);raw[w]={rows,acts}}}));
+ return{v:CACHE_V,who:[...who],off,todayAbs,raw,fullAt:light?prev.fullAt:now,savedAt:now}}
+/* Rohdaten in den Zustand der Karte schreiben */
+async function applyRaw(hass,cfg,who,data,opt){
+ HASSREF=hass;const{off,todayAbs,raw}=data;
  OFF=off;START=new Date(2026,0,1+off);TODAY=new Date(2026,0,1+todayAbs);ND=todayAbs-off;
  ACTS=[];DAILY={};TODAYV={};
  for(const w of who)for(const a of raw[w].acts)ACTS.push(mapLiveAct(w,a));
@@ -1593,8 +1622,10 @@ async function loadLive(hass,cfg,who){
   const hwv=FD.pickState(hass.states||{},puOf(w),UNAME[w],'hrv_wochendurchschnitt').v;
   TODAYV[w]={steps:L.steps,goal:L.goal,bb:L.bb,rhr:L.rhr,rhr7:av('rhr'),hrv:L.hrv,hrvW:isNum(hwv)?hwv:av('hrv'),rlevel:null,rfac:[],sleep:L.sleep,stress:L.stress,ready:L.ready,status:stx.replace(/_/g,' ').toLowerCase().replace(/^./,c=>c.toUpperCase())||'–',vo2:L.vo2,kcal:L.kcal,slp:L.slp,deep:L.deep,light:L.light,rem:L.rem,awake:L.awake,need:L.need,sr:L.sr,sl:L.sl,sm:L.sm,sh:L.sh}}
  for(const k of Object.keys(ACW))delete ACW[k];
- await refreshLive(hass,who);
+ /* quick: erst nur die aktuellen Sensorwerte, Live-Tracks (Verlaufsabruf) kommen danach, damit der erste Bildaufbau nicht darauf wartet */
+ if(opt&&opt.quick){applyNow(hass,who);DAYSRC=dayReal}else await refreshLive(hass,who);
  return{off,todayAbs,archive:!!cfg.archive}}
+async function loadLive(hass,cfg,who){const d=await fetchRaw(hass,cfg,who,null);return applyRaw(hass,cfg,who,d)}
 
 const nowHM=()=>new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
 function kmIndex(a,m){let d=a.tr?a.tr.d:a._cd;if(!d){const p=a.ll||[];d=[0];for(let i=1;i<p.length;i++){const la=(p[i][0]+p[i-1][0])/2*Math.PI/180;d.push(d[i-1]+Math.hypot((p[i][0]-p[i-1][0])*111320,(p[i][1]-p[i-1][1])*111320*Math.cos(la)))}
@@ -1649,7 +1680,7 @@ function readSleepx(st,w){if(FD.sourceMode('sleep')==='connect')return null;cons
 let ME=null;
 /* Quelle wechseln: Wahl merken, alles neu laden (Tageswerte, Verlauf) und Ansicht behalten */
 async function switchSource(m,key){try{if(key){const o=srcByStored();o[key]=m;localStorage.setItem(SRCBYKEY,JSON.stringify(o))}else localStorage.setItem(SRCKEY,m)}catch(e){}applySource();if(!LIVE||!HASSREF||!ME)return;
- const keep={who:S.who,tab:S.tab,day:S.day};await startLive(HASSREF,cfgRef,ME);Object.assign(S,keep);render()}
+ const keep={who:S.who,tab:S.tab,day:S.day};await startLive(HASSREF,cfgRef,ME,{full:true});Object.assign(S,keep);render()}
 /* Runde 2: Schlafzeiten, Stress-Zusatz, HRV-Bandbreite, Alter, Etagen, Pulszonen, Trainingseffekt. Was fehlt, bleibt null und wird nicht angezeigt. */
 function readExtras(st,w,T){const pu=puOf(w),cu=UNAME[w],num=v=>{v=parseFloat(v);return isFinite(v)?v:null},ent=n=>st['sensor.'+pu+'_'+n],pers=k=>FD.sourceMode(k)!=='connect',px=n=>FD.pickState(st,pu,cu,n);
  const bed=FD.pickTs(st,pu,cu,'schlafenszeit'),wk=FD.pickTs(st,pu,cu,'aufwachzeit');
@@ -1763,6 +1794,8 @@ function vecLoad(base){
 async function vecCss(base){
  if(root.querySelector('#mlcss'))return;const st=document.createElement('style');st.id='mlcss';root.appendChild(st);
  try{const r=await fetch(base+'maplibre-gl.css');st.textContent=await r.text()}catch(e){}}
+/* MapLibre (Skript und CSS) im Leerlauf vorladen, damit der erste Wechsel zu Touren nicht auf das CDN wartet */
+function vecPrewarm(){if(BM!=='vector'||self.maplibregl||self.__mlLoad||VECSTATE==='failed')return;const base=(cfgRef&&cfgRef.maplibre_url)||VECJS;try{vecCss(base);vecLoad(base).catch(()=>{})}catch(e){}}
 function vecDark(){return host.getAttribute('data-theme')==='dark'}
 function vecFail(){VECSTATE='failed';if(VEC){try{VEC.remove()}catch(e){}VEC=null}if($('#legend'))legend();if(S&&S.tab==='tour')drawMap()}
 function vecEnsure(){
@@ -1888,14 +1921,26 @@ function redrawTheme(){if(S&&S.tab==='tour'){drawMap();drawScrub()}}
 function showMsg(t){$('#view').innerHTML='<div class="card muted">'+esc(t)+'</div>'}
 let started=false;
 function startDemo(){BM='none';TILES=false;initDemo();initState();WHO=[['p1',PERS.p1.n],['p2',PERS.p2.n],['both','Beide (Test)']];started=true;$('.demo').hidden=false;render()}
-async function startLive(hass,cfg,me){
+let LIVEDATA=null;
+function enterLive(me,cfg,who){LIVE=true;ME=me;cfgRef=cfg;BM=cfg.basemap||(cfg.tiles===false?'none':'vector');TILES=false;initState();S.who=me;
+ WHO=who.map(k=>[k,PERS[k].n]);if(who.length>1)WHO.push(['both','Beide']);started=true;render();
+ if(self.requestIdleCallback)requestIdleCallback(vecPrewarm,{timeout:5000});else setTimeout(vecPrewarm,2000)}
+/* Start: mit Zwischenspeicher sofort der letzte Stand, dann im Hintergrund aktualisieren. Spätere Aufrufe (alle 15 min) laden still nach und lassen die Ansicht stehen; opt.full lädt alles neu (Quellenwechsel). */
+async function startLive(hass,cfg,me,opt){
  applyCfg(cfg);WHO=[['p1',PERS.p1.n],['p2',PERS.p2.n],['both','Beide']];
- const who=cfg.pair?['p1','p2']:[me];
- $('.demo').hidden=true;showMsg('Daten werden geladen …');
- try{await loadLive(hass,cfg,who)}catch(e){showMsg('Daten konnten nicht geladen werden: '+(e&&e.message||e));return false}
- LIVE=true;ME=me;cfgRef=cfg;BM=cfg.basemap||(cfg.tiles===false?'none':'vector');TILES=false;initState();S.who=me;
- WHO=who.map(k=>[k,PERS[k].n]);if(who.length>1)WHO.push(['both','Beide']);
- started=true;render();return true}
+ const who=cfg.pair?['p1','p2']:[me],full=!!(opt&&opt.full),again=started&&LIVE&&!full,key=cacheKey(hass,who);
+ try{
+  if(again){const d=await fetchRaw(hass,cfg,who,LIVEDATA);await applyRaw(hass,cfg,who,d);LIVEDATA=d;cachePut(key,d);if(!SH)render();return true}
+  $('.demo').hidden=true;
+  const c=full?null:await cacheGet(key);
+  if(cacheValid(c,hass,who)){
+   await applyRaw(hass,cfg,who,c,{quick:true});LIVEDATA=c;enterLive(me,cfg,who);
+   fetchRaw(hass,cfg,who,c).then(async d=>{await applyRaw(hass,cfg,who,d);LIVEDATA=d;cachePut(key,d);if(!SH)render()}).catch(()=>{});
+   return true}
+  showMsg('Daten werden geladen …');
+  const d=await fetchRaw(hass,cfg,who,null);await applyRaw(hass,cfg,who,d,{quick:true});LIVEDATA=d;cachePut(key,d);
+  enterLive(me,cfg,who);refreshLive(hass,who).then(()=>{if(!SH)render()}).catch(()=>{});return true
+ }catch(e){if(!started||!LIVE)showMsg('Daten konnten nicht geladen werden: '+(e&&e.message||e));return again?true:false}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&SH)closeSheet()});
 document.addEventListener('keydown',trapTab);
 return{startDemo,startLive,refreshLive:async(h,cfg,me)=>{if(!started||!LIVE)return;await refreshLive(h,cfg.pair?['p1','p2']:[me]);if(!SH)render()},redrawTheme,get started(){return started},render:()=>{if(started&&!SH)render()}}
