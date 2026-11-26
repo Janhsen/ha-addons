@@ -15,7 +15,9 @@ let DAYSTATS=null; /* null = noch unbekannt, true = activity_archive/day_stats v
 /* ---- Zeit ---- */
 const FMT_CACHE=new Map(); /* ein Formatter je Zeitzone: ihn pro Zeile neu zu bauen kostete ca. 2,4 s je Person */
 function parts(ms,tz){let fm=FMT_CACHE.get(tz);if(!fm)FMT_CACHE.set(tz,fm=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}));const f=fm.formatToParts(new Date(ms)),o={};for(const p of f)o[p.type]=+p.value;return o}
-function dayIndex(ms,tz){const p=parts(ms,tz);return Math.round((Date.UTC(p.year,p.month-1,p.day)-START_UTC)/DAY)}
+/* Tagesindex je Zeitzone und 15-Minuten-Fenster merken (Zeitzonen-Versätze sind Vielfache von 15 min): spart formatToParts je Zeile */
+const DI_CACHE=new Map();
+function dayIndex(ms,tz){let c=DI_CACHE.get(tz);if(!c)DI_CACHE.set(tz,c=new Map());const k=Math.floor(ms/9e5);let v=c.get(k);if(v===undefined){const p=parts(ms,tz);v=Math.round((Date.UTC(p.year,p.month-1,p.day)-START_UTC)/DAY);if(c.size>50000)c.clear();c.set(k,v)}return v}
 function hourOf(ms,tz){return parts(ms,tz).hour}
 /* Beginn des lokalen Tages als ISO-UTC (für WS-Abfragen) */
 function dayStartIso(idx,tz){const d=new Date(START_UTC+idx*DAY),y=d.getUTCFullYear(),m=d.getUTCMonth(),dd=d.getUTCDate();
@@ -723,10 +725,11 @@ function navVariant(){const top=$('.top');if(!top)return;let sw=$('#nvsw'),t2=$(
  t2.innerHTML=NV==='top'?TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" aria-pressed="${S.tab===k}">${ic(i,18)}<span>${n}</span></button>`).join(''):NV==='title'?TABS.map(([k,n])=>`<button data-k="${k}" ${S.tab===k?'aria-current="page"':''}>${n}</button>`).join(''):'';
  const w=$('.wrap');if(w)w.classList.toggle('nvnodock',NV!=='dock')}
 let topRO=null;
-function topH(){const t=$('.top'),w=$('.wrap');if(!t||!w)return;const set=()=>w.style.setProperty('--toph',t.offsetHeight+'px');set();if(!topRO&&window.ResizeObserver){topRO=new ResizeObserver(set);topRO.observe(t)}}
+function topH(){const t=$('.top'),w=$('.wrap');if(!t||!w)return;const set=()=>w.style.setProperty('--toph',t.offsetHeight+'px');if(!topRO)set();if(!topRO&&window.ResizeObserver){topRO=new ResizeObserver(set);topRO.observe(t)}}
+let HDT='',HDW='';
 function mountHeader(){
- $('#tabs').innerHTML=TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" ${S.tab===k?'aria-current="page"':''}>${ic(i,24)}<span>${n}</span></button>`).join('');
- topH();navVariant();$('#who').className='chips2 whot';$('#who').innerHTML=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')+(WHO.some(x=>x[0]==='both')?`<button class="cmpb" data-k="both" aria-pressed="${S.who==='both'}" aria-label="Beide vergleichen">${ic('cmp',20)}</button>`:'')+`<button class="cmpb" data-k="src" aria-label="Datenquelle" title="Datenquelle">${ic('sliders',20)}</button>`}
+ const th=TABS.map(([k,n,i,c])=>`<button data-k="${k}" style="--tc:${c}" ${S.tab===k?'aria-current="page"':''}>${ic(i,24)}<span>${n}</span></button>`).join('');if(th!==HDT||!$('#tabs').firstChild){$('#tabs').innerHTML=th;HDT=th}
+ topH();navVariant();$('#who').className='chips2 whot';const wh=WHO.filter(([k])=>k!=='both').map(([k,n])=>`<button data-k="${k}" style="--pc:var(${PERS[k].c})" aria-pressed="${S.who===k||S.who==='both'}"><span class="dot"></span>${n}</button>`).join('')+(WHO.some(x=>x[0]==='both')?`<button class="cmpb" data-k="both" aria-pressed="${S.who==='both'}" aria-label="Beide vergleichen">${ic('cmp',20)}</button>`:'')+`<button class="cmpb" data-k="src" aria-label="Datenquelle" title="Datenquelle">${ic('sliders',20)}</button>`;if(wh!==HDW||!$('#who').firstChild){$('#who').innerHTML=wh;HDW=wh}}
 $('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;setTab(b.dataset.k)};
 $('#who').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;if(k==='src'){openSource();return}let nw;if(k==='both')nw=S.who==='both'?(S.last1||'p1'):'both';else nw=k;if(S.who!=='both')S.last1=S.who;if(nw!=='both')S.last1=nw;if(nw===S.who)return;S.who=nw;S.sel=null;S.card=null;S.kpi=null;S.pwin=null;render()};
 function setTab(k){S.tab=k;S.play=false;clearInterval(playT);render()}
@@ -1222,7 +1225,7 @@ function legend(){$('#legend').innerHTML=persons().map(w=>`<span class="dot" sty
 function regions(){const fl=filtered().filter(a=>a.gps),ks=[...new Set(fl.map(a=>a.place))];$('#regions').innerHTML=ks.map(k=>`<button class="chip" data-p="${k}">${PL[k].n}</button>`).join('');$('#regions').onclick=e=>{const b=e.target.closest('button');if(!b)return;fitList(fl.filter(a=>a.place===b.dataset.p),50)}}
 function buildRows(){const fl=filtered();let cur='',h='';
  for(const a of fl){const m=a.date.getFullYear()+'-'+a.date.getMonth();if(m!==cur){cur=m;h+=`<div class="mh">${MON[a.date.getMonth()]} ${a.date.getFullYear()}</div>`}
-  h+=`<button class="row" data-id="${a.id}" aria-current="${a.id===S.sel}"><span class="av" style="background:var(${PERS[a.who].c})">${ic(a.sport,18)}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${a.date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}${S.who==='both'?' · '+PERS[a.who].n:''}${jointOf(a)?' · zu zweit':''}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<div class="muted sm" style="font-weight:400">${a.gps?hm(a.st.dur):''}</div></span></button>`}
+  h+=`<button class="row" data-id="${a.id}" aria-current="${a.id===S.sel}"><span class="av" style="background:var(${PERS[a.who].c})">${ic(a.sport,18)}</span><span class="t"><b>${esc(ttl(a))}</b><span class="muted sm">${dfmt(a.date,{weekday:'short',day:'numeric',month:'numeric'})} · ${clk(a.date)}${S.who==='both'?' · '+PERS[a.who].n:''}${jointOf(a)?' · zu zweit':''}</span></span><span class="r">${a.gps?f1(a.st.dist/1000)+' km':hm(a.st.dur)}<div class="muted sm" style="font-weight:400">${a.gps?hm(a.st.dur):''}</div></span></button>`}
  $('#rows').innerHTML=h||'<div class="card muted">Keine Aktivitäten im Filter.</div>';
  $('#rows').onclick=e=>{const b=e.target.closest('.row');if(b){select(b.dataset.id,{fly:true});if(innerWidth<641){const dt=$('#det');dt&&dt.scrollIntoView({behavior:'smooth',block:'start'})}}}}
 function select(id,o={}){fpopClose();const wasS=matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d==='s';if(matchMedia(MQ_M).matches&&$('#tsheet')&&$('#tsheet').dataset.d!=='m')setDetent('m');if(S.pick){S.pick=null;const pk=$('#pick');if(pk)pk.remove()}S.sel=id;S.cursor=null;$$('.row').forEach(r=>r.setAttribute('aria-current',r.dataset.id===id));const r=$(`.row[data-id="${id}"]`);if(r&&!o.noScroll){const box=$('#rows'),t=r.offsetTop-box.offsetTop;if(t<box.scrollTop||t+r.offsetHeight>box.scrollTop+box.clientHeight)box.scrollTo({top:t-box.clientHeight/2,behavior:o.fast?'auto':'smooth'})}
@@ -1831,7 +1834,7 @@ function vecEnsure(){
  if(VEC&&VEC.getContainer()!==box){try{VEC.remove()}catch(e){}VEC=null;if(VECSTATE==='ready')VECSTATE=''}
  if(VEC||VECSTATE==='loading')return;
  VECSTATE='loading';const base=(cfgRef&&cfgRef.maplibre_url)||VECJS;vecCss(base);
- vecLoad(base).then(ml=>{const b=$('#mlmap');if(!b){VECSTATE='';return}
+ vecLoad(base).then(ml=>Promise.race([new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0))),new Promise(r=>setTimeout(r,300))]).then(()=>ml)).then(ml=>{const b=$('#mlmap');if(!b){VECSTATE='';return}
   const[la,lo]=latlon(MV.x,MV.y);const dk=vecDark();
   VEC=new ml.Map({container:b,style:vecStyle(dk),interactive:false,attributionControl:false,fadeDuration:0,center:[lo,la],zoom:MV.z-1});VEC._dark=dk;VECCUR=null;
   let miss=0;VEC.on('error',e=>{const er=e&&e.error||{};if((er.status>=400||/fetch|network|load failed/i.test(er.message||''))&&++miss>=8&&!VEC.loaded())vecFail()});
@@ -1991,7 +1994,7 @@ class FitnessCard extends HTMLElement{
   this._hass=h;const dark=!!(h.themes&&h.themes.darkMode);
   if(dark!==this._dark){this._dark=dark;this.setAttribute('data-theme',dark?'dark':'light');if(this._app&&this._app.started)this._app.redrawTheme()}
   if(!this._started&&this._app&&!this._cfg.demo)this._begin();
-  else if(this._app&&this._app.started&&!this._cfg.demo){const sig=liveSigOf(h);if(sig!==this._lsig&&Date.now()-(this._lt||0)>20000){this._lsig=sig;this._lt=Date.now();const me=this._me();if(me)this._app.refreshLive(h,this._cfg,me)}}}
+  else if(this._app&&this._app.started&&!this._cfg.demo&&Date.now()-(this._lt||0)>20000){const sig=liveSigOf(h);if(sig!==this._lsig){this._lsig=sig;this._lt=Date.now();const me=this._me();if(me)this._app.refreshLive(h,this._cfg,me)}}}
  _me(){const c=this._cfg,id=this._hass&&this._hass.user&&this._hass.user.id;if(c.person)return c.person;
   for(const k of['p1','p2'])if(c.users&&c.users[k]===id)return k;return null}
  async _begin(){
