@@ -7,6 +7,8 @@ if(customElements.get('fitness-card'))return;
 (function(root){
 'use strict';
 const START_UTC=Date.UTC(2026,0,1),DAY=864e5;
+let DATTRS=null,DA_AT=0; /* wie DAYSTATS, für activity_archive/distinct_attributes (Aktivitäten und Routen) */
+let DS_AT=0,DSS_AT=0; /* Zeitpunkt des letzten 'gibt es nicht': nach 30 min wird der Befehl noch einmal versucht (HA-Neustart bei offener App) */
 let DAYSTATES=null; /* wie DAYSTATS, für activity_archive/day_states (Zustände statt Statistik: Bereitschaft, Schlaf-/Aufwachzeit) */
 let DAYSTATS=null; /* null = noch unbekannt, true = activity_archive/day_stats vorhanden, false = nicht vorhanden (alter Weg) */
 
@@ -115,10 +117,13 @@ function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.c
  const ws=msg=>hass.callWS(msg),cache=new Map(),memo=(k,f)=>{if(!cache.has(k))cache.set(k,f().catch(e=>{cache.delete(k);throw e}));return cache.get(k)};
  const stats=(ids,period,types,a,b)=>ws({type:'recorder/statistics_during_period',start_time:a,end_time:b,statistic_ids:ids,period,types});
  /* na: ohne Attribute (Zustand und Zeit reichen; lastPerDay/tsPerDay liefern damit dieselben Werte, die Antwort ist ca. 10x kleiner) */
+ /* 'gibt es nicht' nur merken, wenn HA fertig gestartet ist (eigene Integrationen laden spät) */
+ const gone=e=>!!e&&(e.code==='unknown_command'||e.code==='not_found')&&(!hass.config||!hass.config.state||hass.config.state==='RUNNING');
  const hist=(ids,a,b,na)=>ws({type:'history/history_during_period',start_time:a,end_time:b,entity_ids:ids,include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:!!na});
  return{id:'recorder',user,tz,
   /* ältester Tag, für den der Recorder Garmin-Daten hat; davor liefert diese Quelle nichts */
-  async coverage(){return memo('cov',async()=>{const mode=sourceMode('steps'),ids=mode==='personal'?[PP+'schritte']:mode==='connect'?[P+'schritte']:[PP+'schritte',P+'schritte'];const r=await stats(ids,'day',['state'],'2026-01-01T00:00:00Z',new Date().toISOString());let from=null;for(const id of ids){const rows=r[id]||[];if(rows.length){const d=dayIndex(rows[0].start,tz);if(from==null||d<from)from=d}}return{from}})},
+  /* opt.from: Beginn schon bekannt (Stand von vorhin), dann ohne Abruf */
+  async coverage(){if(opt.from!==undefined)return{from:opt.from};return memo('cov',async()=>{const mode=sourceMode('steps'),ids=mode==='personal'?[PP+'schritte']:mode==='connect'?[P+'schritte']:[PP+'schritte',P+'schritte'];const r=await stats(ids,'day',['state'],'2026-01-01T00:00:00Z',new Date().toISOString());let from=null;for(const id of ids){const rows=r[id]||[];if(rows.length){const d=dayIndex(rows[0].start,tz);if(from==null||d<from)from=d}}return{from}})},
   /* Tageswerte: Array von {day, steps, ...} mit null bei fehlenden Werten */
   async daily(fromDay,toDay){const a=dayStartIso(fromDay,tz),b=dayStartIso(toDay+1,tz),byKind={change:new Set(),last:new Set(),mean:new Set(),hist:new Set(),ts:new Set()};
    /* je Feld die Kandidaten in Auswahlreihenfolge (Quellenwahl): pro Tag gewinnt der erste mit Wert */
@@ -128,24 +133,31 @@ function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.c
    /* Stundenwerte: wenn die Integration activity_archive den Befehl day_stats kennt, kommt je Tag ein Wert (ca. 1/22 der Daten, dieselben Zahlen);
       sonst (unknown_command, Fehler) der bisherige Weg über die Stundenstatistik */
    const hourTask=async()=>{if(!(byKind.last.size||byKind.mean.size))return{rows:{}};
-    if(DAYSTATS!==false)try{const r=await ws({type:'activity_archive/day_stats',start_time:a,end_time:b,last:[...byKind.last],mean:[...byKind.mean]});if(r&&r.last&&r.mean){DAYSTATS=true;return{ds:r}}}catch(e){if(e&&(e.code==='unknown_command'||e.code==='not_found'))DAYSTATS=false}
+    if(DAYSTATS!==false||Date.now()-DS_AT>18e5)try{const r=await ws({type:'activity_archive/day_stats',start_time:a,end_time:b,last:[...byKind.last],mean:[...byKind.mean]});if(r&&r.last&&r.mean){DAYSTATS=true;return{ds:r}}}catch(e){if(gone(e)){DAYSTATS=false;DS_AT=Date.now()}}
     return{rows:await stats([...byKind.last,...byKind.mean],'hour',['mean','state'],a,b)}};
    /* Zustände (Bereitschaft, Schlaf-/Aufwachzeit): mit day_states je Tag ein Wert bzw. je Zeitstempel ein Eintrag, sonst die volle History */
    const statesTask=async()=>{const hs=[...byKind.hist],tsI=[...byKind.ts];if(!(hs.length||tsI.length))return{rows:{}};
-    if(DAYSTATES!==false)try{const r=await ws({type:'activity_archive/day_states',start_time:a,end_time:b,last:hs,times:tsI});if(r&&r.last&&r.times){DAYSTATES=true;return{ds:r}}}catch(e){if(e&&(e.code==='unknown_command'||e.code==='not_found'))DAYSTATES=false}
-    return{rows:await hist([...hs,...tsI],a,b,true)}};
+    /* einen Tag früher beginnen: der Zustand zu Fensterbeginn zählt sonst als Wert des ersten Tages, obwohl er älter sein kann; der Vortag wird unten verworfen */
+    const a0=dayStartIso(fromDay-1,tz);
+    if(DAYSTATES!==false||Date.now()-DSS_AT>18e5)try{const r=await ws({type:'activity_archive/day_states',start_time:a0,end_time:b,last:hs,times:tsI});if(r&&r.last&&r.times){DAYSTATES=true;return{ds:r}}}catch(e){if(gone(e)){DAYSTATES=false;DSS_AT=Date.now()}}
+    return{rows:await hist([...hs,...tsI],a0,b,true)}};
    const[dayRows,hour,hSt]=await Promise.all([
     byKind.change.size?stats([...byKind.change],'day',['change'],a,b):{},
     hourTask(),
     statesTask()]);
-   const dsMap=o=>{const m=new Map();for(const[ds,v]of Object.entries(o||{})){const[y,mo,d]=ds.split('-').map(Number);if(isFinite(v))m.set(Math.round((Date.UTC(y,mo-1,d)-START_UTC)/DAY),v)}return m};
+   const dsMap=o=>{const m=new Map();for(const[ds,v]of Object.entries(o||{})){const[y,mo,d]=ds.split('-').map(Number);if(v!=null&&isFinite(v))m.set(Math.round((Date.UTC(y,mo-1,d)-START_UTC)/DAY),v)}return m};
    for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='ts'?tsPerDay(hSt.ds?(hSt.ds.times[x.id]||[]).map(s=>({s})):hSt.rows[x.id],tz,f):k==='hist'?(hSt.ds?dsMap(hSt.ds.last[x.id]):lastPerDay(hSt.rows[x.id],tz)):k==='change'?aggregateStats(dayRows[x.id],k,tz):hour.ds?dsMap(hour.ds[k][x.id]):aggregateStats(hour.rows[x.id],k,tz),x.fac);
    const days=[];for(let d=fromDay;d<=toDay;d++){const o=out.get(d)||{day:d};for(const f of Object.keys(FIELDS))if(o[f]==null)o[f]=null;
     o.light=o.light; days.push(o)}return days},
   /* Aktivitäten, aus Historie der Garmin-Sensoren; Routen verknüpft über aktivitaet_id */
   async activities(fromDay,toDay,o){const since=o&&o.since;return memo('act'+(since?'-'+Math.floor(since/6e4):''),async()=>{const a=dayStartIso(0,tz),b=new Date().toISOString();
    const ids=[P+'letzte_aktivitat',P+'letzte_aktivitaten',P+'route_vereinfacht'];
-   const h=await hist(ids,new Date(Math.max(Date.now()-35*DAY,since||0)).toISOString(),b);
+   /* mit activity_archive/distinct_attributes kommt jeder Attributsatz einmal (statt je Zustandszeile); Reihenfolge wie in der History:
+      Aktivitäten nach erstem Auftreten (die erste Fassung gewinnt), Routen nach letztem Auftreten (die letzte gewinnt). Sonst die volle History. */
+   const t0=new Date(Math.max(Date.now()-35*DAY,since||0)).toISOString();let h=null;
+   if(DATTRS!==false||Date.now()-DA_AT>18e5)try{const r=await ws({type:'activity_archive/distinct_attributes',start_time:t0,end_time:b,entity_ids:ids});
+     if(r&&typeof r==='object'){DATTRS=true;h={};for(const id of ids){const rows=(r[id]||[]).slice();if(id===P+'route_vereinfacht')rows.sort((x,y)=>x.l-y.l);h[id]=rows}}}catch(e){if(gone(e)){DATTRS=false;DA_AT=Date.now()}}
+   if(!h)h=await hist(ids,t0,b);
    const single=(h[P+'letzte_aktivitat']||[]).map(x=>x.a||x.attributes).filter(Boolean);
    const lists=[];for(const x of h[P+'letzte_aktivitaten']||[]){const at=x.a||x.attributes;if(at&&at.last_activities)lists.push(at.last_activities)}
    const routes=routesFromStates(h[P+'route_vereinfacht']);
@@ -172,7 +184,7 @@ async function combine(recorder,archive){
   async dayCurve(d,k){return recorder.dayCurve(d,k)},
   async trackDetail(act){if(archive.enabled){try{return await archive.trackDetail(act)}catch(_){}}return null}}}
 
-const api={get daystats(){return DAYSTATS},get daystates(){return DAYSTATES},resetDaystats(){DAYSTATS=null;DAYSTATES=null},tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
+const api={get daystats(){return DAYSTATS},get daystates(){return DAYSTATES},get dattrs(){return DATTRS},resetDaystats(){DAYSTATS=null;DAYSTATES=null;DATTRS=null;DS_AT=0;DSS_AT=0;DA_AT=0},tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FitnessData=api;
 })(typeof self!=='undefined'?self:this);
 
@@ -576,7 +588,8 @@ const f0=n=>ok(n)?NF0.format(Math.round(n)):'–',f1=n=>ok(n)?NF1.format(n):'–
 const uv=(v,unit,f)=>ok(v)?(f||f0)(v)+unit:'–';
 /* Formatter einmal je Optionssatz anlegen (jedes toLocaleDateString baut sonst einen neuen: bei einem Wechsel zu Trends ca. 40 % der Zeit); ohne Datumsfelder wie toLocaleDateString Jahr/Monat/Tag ergänzen */
 const DFC=new Map();
-const dfmt=(d,o)=>{const k=o?JSON.stringify(o):'';let f=DFC.get(k);if(!f){const oo=o&&(o.weekday||o.year||o.month||o.day)?o:Object.assign({year:'numeric',month:'numeric',day:'numeric'},o);DFC.set(k,f=new Intl.DateTimeFormat('de-DE',oo))}return f.format(d)};
+/* Schlüssel mit dem Zeitzonen-Versatz des Geräts: ein Formatter hält die Zone fest, in der er angelegt wurde (Reise mit offener App) */
+const dfmt=(d,o)=>{if(isNaN(d))return'–';const k=new Date().getTimezoneOffset()+'|'+(o?JSON.stringify(o):'');let f=DFC.get(k);if(!f){const oo=o&&(o.weekday||o.year||o.month||o.day)?o:Object.assign({year:'numeric',month:'numeric',day:'numeric'},o);DFC.set(k,f=new Intl.DateTimeFormat('de-DE',oo))}return f.format(d)};
 const hm=s=>{if(!ok(s))return'–';s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+':'+String(m).padStart(2,'0')+' h':m+' min'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -945,7 +958,7 @@ function sleepxHtml(w,di){const T=TODAYV[w],x=di===ND&&T&&T.sleepx;if(!x)return'
  if(!q&&!st&&!tx)return'';
  return`<div class="sx2"><b>Teilwerte des Schlafwerts</b>${q}${st?`<div class="muted sm" style="margin-top:8px">Anteile der Nacht, grauer Bereich = Idealbereich</div>${st}`:''}${tx}${isLive()?'':'<div class="muted sm" style="margin-top:6px">Beispieldaten</div>'}</div>`}
 /* ---------- Runde 2: Schlafzeiten, HRV-Nacht, Stress-Zusatz, Wochenziel, Fitnessalter, Trainingseffekt, Pulszonen ---------- */
-const TFC=new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'}),clk=ms=>TFC.format(new Date(ms));
+const TFC=new Map(),clk=ms=>{const d=new Date(ms);if(isNaN(d))return'–';const k=new Date().getTimezoneOffset();let f=TFC.get(k);if(!f)TFC.set(k,f=new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'}));return f.format(d)};
 const exNote=()=>isLive()?'':'<div class="muted sm" style="margin-top:6px">Beispieldaten</div>';
 /* Schlafzeiten: ins Bett, aufgestanden, Zeit im Bett gegen Schlafdauer; Fenster von 18 Uhr am Vorabend bis 12 Uhr */
 function hintsHtml(w,di){const T=TODAYV[w];if(di!==ND||!T)return'';const nm=S.who==='both'?PERS[w].n+': ':'',o=[];
@@ -1594,26 +1607,35 @@ function detectJoint(list){
 /* ---- Zwischenspeicher im Browser (IndexedDB): beim Öffnen sofort der letzte Stand, danach im Hintergrund aktualisieren ---- */
 const CACHE_V=1,CACHE_STORE='raw';
 function idbOpen(){return new Promise((ok,no)=>{try{const r=indexedDB.open('fitness-card',1);r.onupgradeneeded=()=>r.result.createObjectStore(CACHE_STORE);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}catch(e){no(e)}})}
+/* höchstens 400 ms warten: ein hängendes IndexedDB darf die Karte nicht leer lassen */
+const cacheGetFast=k=>Promise.race([cacheGet(k),new Promise(r=>setTimeout(r,400,null))]);
 async function cacheGet(k){try{const db=await idbOpen();return await new Promise(ok=>{const q=db.transaction(CACHE_STORE).objectStore(CACHE_STORE).get(k);q.onsuccess=()=>{db.close();ok(q.result||null)};q.onerror=()=>{db.close();ok(null)}})}catch(e){return null}}
 async function cachePut(k,v){try{const db=await idbOpen();await new Promise(ok=>{const t=db.transaction(CACHE_STORE,'readwrite');t.objectStore(CACHE_STORE).put(v,k);t.oncomplete=()=>{db.close();ok()};t.onerror=t.onabort=()=>{db.close();ok()}})}catch(e){}}
 /* Schlüssel: Nutzer, Personenliste und Quellenwahl; ändert sich eins davon, gilt der alte Stand nicht */
 const cacheKey=(hass,who)=>[(hass.user&&hass.user.id)||'',who.join(','),JSON.stringify([srcNow(),srcByStored(),SRCCFG.source_by||{},UNAME,PUN])].join('|');
 const todayAbsOf=hass=>FD.dayIndex(Date.now(),(hass.config&&hass.config.time_zone)||'Europe/Berlin');
 const cacheValid=(c,hass,who)=>!!c&&c.v===CACHE_V&&c.todayAbs===todayAbsOf(hass)&&JSON.stringify(c.who)===JSON.stringify(who)&&c.raw&&who.every(w=>c.raw[w]&&c.raw[w].rows&&c.raw[w].acts);
-/* Rohdaten laden: beide Personen gleichzeitig. Mit prev (Stand von vorhin, am selben Tag, höchstens 3 h alt) nur die letzten 3 Tage und Aktivitäten der letzten 3 Tage nachladen und einmischen. */
+/* Stand von einem der letzten 3 Tage: sofort zeigen, die fehlenden Tage bleiben leer (heute füllt applyNow aus den Sensoren), dahinter wird alles neu geladen */
+function rollCache(c,hass,who){const t=todayAbsOf(hass);if(!c||c.v!==CACHE_V||!(c.todayAbs<t)||t-c.todayAbs>3||JSON.stringify(c.who)!==JSON.stringify(who)||!c.raw||!who.every(w=>c.raw[w]&&c.raw[w].rows&&c.raw[w].acts))return null;
+ const raw={};for(const w of who){const rows=c.raw[w].rows.slice();for(let d=c.todayAbs+1;d<=t;d++){const o={day:d};for(const f of Object.keys(FD.FIELDS))o[f]=null;o.missing=true;rows.push(o)}raw[w]={rows,acts:c.raw[w].acts}}
+ return Object.assign({},c,{todayAbs:t,raw,rolled:true})}
+/* Rohdaten laden: beide Personen gleichzeitig. Mit prev (Stand von vorhin, am selben Tag, höchstens 3 h alt, gleiche Quellenwahl) nur die letzten 3 Tage und Aktivitäten der letzten 3 Tage nachladen und einmischen. */
 async function fetchRaw(hass,cfg,who,prev){
- const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',todayAbs=FD.dayIndex(Date.now(),tz),srcs={},covs={};
- await Promise.all(who.map(async w=>{srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w],{personal:puOf(w)}),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}));
+ const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',todayAbs=FD.dayIndex(Date.now(),tz),srcs={},covs={},now=Date.now(),key=cacheKey(hass,who);
+ const light=!!prev&&!prev.rolled&&prev.key===key&&!!prev.cov&&prev.todayAbs===todayAbs&&now-prev.fullAt<3*36e5&&JSON.stringify(prev.who)===JSON.stringify(who)&&who.every(w=>prev.cov[w]&&prev.raw[w]&&prev.raw[w].rows&&prev.raw[w].rows.length===todayAbs-prev.off+1);
+ /* im kurzen Weg ist der Beginn der Daten bekannt: kein eigener Abruf dafür */
+ await Promise.all(who.map(async w=>{const o={personal:puOf(w)};if(light)o.from=prev.cov[w].recorderFrom;srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w],o),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}));
  const froms=who.map(w=>covs[w].archiveEnabled?0:covs[w].recorderFrom).filter(x=>x!=null);
  if(!froms.length)throw new Error('Noch keine Garmin-Daten im Recorder');
- const off=Math.min(...froms),now=Date.now();
- const light=!!prev&&prev.off===off&&prev.todayAbs===todayAbs&&now-prev.fullAt<3*36e5&&JSON.stringify(prev.who)===JSON.stringify(who)&&who.every(w=>prev.raw[w]&&prev.raw[w].rows&&prev.raw[w].rows.length===todayAbs-off+1);
- const from=Math.max(off,todayAbs-2),raw={};
+ const off=light?prev.off:Math.min(...froms);
+ const from=Math.max(off,todayAbs-2),raw={},since=now-3*864e5;
  await Promise.all(who.map(async w=>{
-  if(light){const[nr,na]=await Promise.all([srcs[w].daily(from,todayAbs),srcs[w].activities(off,todayAbs,{since:now-3*864e5})]),ids=new Set(na.map(a=>a.id));
-   raw[w]={rows:prev.raw[w].rows.slice(0,from-off).concat(nr),acts:prev.raw[w].acts.filter(a=>!ids.has(a.id)).concat(na).sort((x,y)=>y.date-x.date)}}
+  if(light){const[nr,na]=await Promise.all([srcs[w].daily(from,todayAbs),srcs[w].activities(off,todayAbs,{since})]);
+   /* Aktivitäten vor dem kurzen Fenster kennt dieser Abruf nur aus der Liste (ohne Route und Pulszonen): dafür bleibt der gespeicherte, vollständige Stand */
+   const old=new Map(prev.raw[w].acts.map(a=>[a.id,a])),fresh=na.filter(a=>!(old.has(a.id)&&+a.date<since)),ids=new Set(fresh.map(a=>a.id));
+   raw[w]={rows:prev.raw[w].rows.slice(0,from-off).concat(nr),acts:prev.raw[w].acts.filter(a=>!ids.has(a.id)).concat(fresh).sort((x,y)=>y.date-x.date)}}
   else{const[rows,acts]=await Promise.all([srcs[w].daily(off,todayAbs),srcs[w].activities(off,todayAbs)]);raw[w]={rows,acts}}}));
- return{v:CACHE_V,who:[...who],off,todayAbs,raw,fullAt:light?prev.fullAt:now,savedAt:now}}
+ return{v:CACHE_V,key,who:[...who],off,cov:covs,todayAbs,raw,fullAt:light?prev.fullAt:now,savedAt:now}}
 /* Rohdaten in den Zustand der Karte schreiben */
 async function applyRaw(hass,cfg,who,data,opt){
  HASSREF=hass;const{off,todayAbs,raw}=data;
@@ -1715,7 +1737,8 @@ function applyNow(hass,who){const st=hass&&hass.states||{};for(const w of who){c
  for(const [k,n] of Object.entries(NOWK)){const r=FD.pickState(st,puOf(w),UNAME[w],n,FD.sourceMode(k));if(r.v==null)continue;const e=r.e,v=r.v;T[k]=Math.round(v);T.src[k]=r.src;if(d)d[k]=Math.round(v);const t=Date.parse(e.last_updated||e.last_changed||'');if(isFinite(t)&&t>lu)lu=t}
  readReadiness(st,w,T);T.sleepx=readSleepx(st,w);readExtras(st,w,T);
  if(lu)NOWAT[w]=lu}}
-const standHM=w=>NOWAT[w]?new Date(NOWAT[w]).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):nowHM();
+/* ohne Sensorzeit: Zeitpunkt des gespeicherten Stands, nicht die aktuelle Uhrzeit */
+const standHM=w=>{const t=NOWAT[w]||(LIVEDATA&&LIVEDATA.savedAt);return t?new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):nowHM()};
 async function refreshLive(hass,who){
  applyNow(hass,who);DAYSRC=dayReal;
  const lv=await loadLiveTracks(hass,who);
@@ -1931,24 +1954,27 @@ function enterLive(me,cfg,who){LIVE=true;ME=me;cfgRef=cfg;BM=cfg.basemap||(cfg.t
  WHO=who.map(k=>[k,PERS[k].n]);if(who.length>1)WHO.push(['both','Beide']);started=true;render();
  if(self.requestIdleCallback)requestIdleCallback(vecPrewarm,{timeout:5000});else setTimeout(vecPrewarm,2000)}
 /* Start: mit Zwischenspeicher sofort der letzte Stand, dann im Hintergrund aktualisieren. Spätere Aufrufe (alle 15 min) laden still nach und lassen die Ansicht stehen; opt.full lädt alles neu (Quellenwechsel). */
+let GEN=0,HNOW=null; /* GEN: nur der jüngste Ladevorgang darf anzeigen und speichern; HNOW: aktuelles hass-Objekt */
 async function startLive(hass,cfg,me,opt){
- applyCfg(cfg);WHO=[['p1',PERS.p1.n],['p2',PERS.p2.n],['both','Beide']];
- const who=cfg.pair?['p1','p2']:[me],full=!!(opt&&opt.full),again=started&&LIVE&&!full,key=cacheKey(hass,who);
+ applyCfg(cfg);HNOW=hass;
+ const who=cfg.pair?['p1','p2']:[me],full=!!(opt&&opt.full),again=started&&LIVE&&!full,key=cacheKey(hass,who),g=++GEN;
+ /* neuer Stand: anzeigen und speichern, außer ein jüngerer Ladevorgang läuft schon. Nach einem Tageswechsel bleibt "heute" gewählt. */
+ const take=async d=>{if(g!==GEN)return;const onToday=started&&S&&S.day===ND;await applyRaw(HNOW||hass,cfg,who,d);LIVEDATA=d;if(onToday)S.day=ND;cachePut(d.key||key,d);if(!SH)render()};
  try{
-  if(again){const d=await fetchRaw(hass,cfg,who,LIVEDATA);await applyRaw(hass,cfg,who,d);LIVEDATA=d;cachePut(key,d);if(!SH)render();return true}
+  if(again){await take(await fetchRaw(hass,cfg,who,LIVEDATA));return true}
   $('.demo').hidden=true;
-  const c=full?null:await cacheGet(key);
-  if(cacheValid(c,hass,who)){
+  const c0=full?null:await cacheGetFast(key),c=cacheValid(c0,hass,who)?c0:rollCache(c0,hass,who);
+  if(c){
    await applyRaw(hass,cfg,who,c,{quick:true});LIVEDATA=c;enterLive(me,cfg,who);
-   fetchRaw(hass,cfg,who,c).then(async d=>{await applyRaw(hass,cfg,who,d);LIVEDATA=d;cachePut(key,d);if(!SH)render()}).catch(()=>{});
+   const bg=n=>fetchRaw(HNOW||hass,cfg,who,c).then(take).catch(()=>{if(n&&g===GEN)setTimeout(bg,60000,0)});bg(1); /* scheitert der Abruf, nach 1 min einmal wiederholen */
    return true}
   showMsg('Daten werden geladen …');
-  const d=await fetchRaw(hass,cfg,who,null);await applyRaw(hass,cfg,who,d,{quick:true});LIVEDATA=d;cachePut(key,d);
+  const d=await fetchRaw(hass,cfg,who,null);if(g!==GEN)return true;await applyRaw(hass,cfg,who,d,{quick:true});LIVEDATA=d;cachePut(d.key||key,d);
   enterLive(me,cfg,who);refreshLive(hass,who).then(()=>{if(!SH)render()}).catch(()=>{});return true
  }catch(e){if(!started||!LIVE)showMsg('Daten konnten nicht geladen werden: '+(e&&e.message||e));return again?true:false}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&SH)closeSheet()});
 document.addEventListener('keydown',trapTab);
-return{startDemo,startLive,refreshLive:async(h,cfg,me)=>{if(!started||!LIVE)return;await refreshLive(h,cfg.pair?['p1','p2']:[me]);if(!SH)render()},redrawTheme,get started(){return started},render:()=>{if(started&&!SH)render()}}
+return{startDemo,startLive,refreshLive:async(h,cfg,me)=>{if(!started||!LIVE)return;HNOW=h;if(LIVEDATA&&todayAbsOf(h)!==LIVEDATA.todayAbs)return startLive(h,cfg,me);await refreshLive(h,cfg.pair?['p1','p2']:[me]);if(!SH)render()},redrawTheme,get started(){return started},render:()=>{if(started&&!SH)render()}}
 
 }
 class FitnessCard extends HTMLElement{
@@ -1970,11 +1996,18 @@ class FitnessCard extends HTMLElement{
   for(const k of['p1','p2'])if(c.users&&c.users[k]===id)return k;return null}
  async _begin(){
   const me=this._me();this._started=true;
+  if(this._hass){this._lsig=liveSigOf(this._hass);this._lt=Date.now()} /* der Start zeichnet selbst: das erste hass danach löst kein zweites Zeichnen aus */
   if(!me){this._root.querySelector('#view').innerHTML='<div class="card muted">Dieser Nutzer ist der Karte nicht zugeordnet (Option users oder person).</div>';return}
-  let ok=false;try{ok=await this._app.startLive(this._hass,this._cfg,me)}catch(e){console.error('fitness-card v7 live',e);const v=this._root.querySelector('#view');if(v)v.innerHTML='<div class="card muted" style="white-space:pre-wrap">fitness-card v7: '+String(e&&e.stack||e).replace(/</g,'&lt;')+'</div>'}
-  clearInterval(this._tid);if(ok)this._tid=setInterval(()=>{if(!this._app)return;this._app.startLive(this._hass,this._cfg,me)},15*60*1000)}
- connectedCallback(){if(this._kh)document.addEventListener('keydown',this._kh)}
- disconnectedCallback(){clearInterval(this._tid);if(this._kh)document.removeEventListener('keydown',this._kh)}
+  let ok=false;this._last=Date.now();try{ok=await this._app.startLive(this._hass,this._cfg,me)}catch(e){console.error('fitness-card v7 live',e);const v=this._root.querySelector('#view');if(v)v.innerHTML='<div class="card muted" style="white-space:pre-wrap">fitness-card v7: '+String(e&&e.stack||e).replace(/</g,'&lt;')+'</div>'}
+  this._arm()}
+ /* alle 15 min still nachladen; auch nach einem gescheiterten ersten Abruf und nach dem Wiedereinhängen der Karte */
+ _arm(){clearInterval(this._tid);if(this._cfg.demo)return;this._tid=setInterval(()=>this._reload(),15*60*1000)}
+ _reload(){const me=this._me();if(!this._app||!this._hass||!me||!this._started)return;this._last=Date.now();this._app.startLive(this._hass,this._cfg,me)}
+ connectedCallback(){if(this._kh)document.addEventListener('keydown',this._kh);
+  if(!this._vh){this._vh=()=>{if(document.visibilityState==='visible'&&Date.now()-(this._last||0)>15*60*1000)this._reload()};}
+  document.addEventListener('visibilitychange',this._vh);
+  if(this._started&&!this._cfg.demo){this._arm();if(Date.now()-(this._last||0)>15*60*1000)this._reload()}}
+ disconnectedCallback(){clearInterval(this._tid);if(this._kh)document.removeEventListener('keydown',this._kh);if(this._vh)document.removeEventListener('visibilitychange',this._vh)}
 }
 customElements.define('fitness-card',FitnessCard);
 window.customCards=window.customCards||[];window.customCards.push({type:'fitness-card',name:'Fitness',description:'Fitness-Zeitstrahl für zwei Personen'});
