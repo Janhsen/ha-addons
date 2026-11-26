@@ -7,6 +7,7 @@ if(customElements.get('fitness-card'))return;
 (function(root){
 'use strict';
 const START_UTC=Date.UTC(2026,0,1),DAY=864e5;
+let DAYSTATES=null; /* wie DAYSTATS, für activity_archive/day_states (Zustände statt Statistik: Bereitschaft, Schlaf-/Aufwachzeit) */
 let DAYSTATS=null; /* null = noch unbekannt, true = activity_archive/day_stats vorhanden, false = nicht vorhanden (alter Weg) */
 
 /* ---- Zeit ---- */
@@ -129,12 +130,16 @@ function recorderSource(hass,user,opt){opt=opt||{};const tz=(hass.config&&hass.c
    const hourTask=async()=>{if(!(byKind.last.size||byKind.mean.size))return{rows:{}};
     if(DAYSTATS!==false)try{const r=await ws({type:'activity_archive/day_stats',start_time:a,end_time:b,last:[...byKind.last],mean:[...byKind.mean]});if(r&&r.last&&r.mean){DAYSTATS=true;return{ds:r}}}catch(e){if(e&&(e.code==='unknown_command'||e.code==='not_found'))DAYSTATS=false}
     return{rows:await stats([...byKind.last,...byKind.mean],'hour',['mean','state'],a,b)}};
-   const[dayRows,hour,hRows]=await Promise.all([
+   /* Zustände (Bereitschaft, Schlaf-/Aufwachzeit): mit day_states je Tag ein Wert bzw. je Zeitstempel ein Eintrag, sonst die volle History */
+   const statesTask=async()=>{const hs=[...byKind.hist],tsI=[...byKind.ts];if(!(hs.length||tsI.length))return{rows:{}};
+    if(DAYSTATES!==false)try{const r=await ws({type:'activity_archive/day_states',start_time:a,end_time:b,last:hs,times:tsI});if(r&&r.last&&r.times){DAYSTATES=true;return{ds:r}}}catch(e){if(e&&(e.code==='unknown_command'||e.code==='not_found'))DAYSTATES=false}
+    return{rows:await hist([...hs,...tsI],a,b,true)}};
+   const[dayRows,hour,hSt]=await Promise.all([
     byKind.change.size?stats([...byKind.change],'day',['change'],a,b):{},
     hourTask(),
-    byKind.hist.size||byKind.ts.size?hist([...byKind.hist,...byKind.ts],a,b,true):{}]);
+    statesTask()]);
    const dsMap=o=>{const m=new Map();for(const[ds,v]of Object.entries(o||{})){const[y,mo,d]=ds.split('-').map(Number);if(isFinite(v))m.set(Math.round((Date.UTC(y,mo-1,d)-START_UTC)/DAY),v)}return m};
-   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='ts'?tsPerDay(hRows[x.id],tz,f):k==='hist'?lastPerDay(hRows[x.id],tz):k==='change'?aggregateStats(dayRows[x.id],k,tz):hour.ds?dsMap(hour.ds[k][x.id]):aggregateStats(hour.rows[x.id],k,tz),x.fac);
+   for(const[f,[,k]]of Object.entries(FIELDS))for(const x of cands[f])put(f,k==='ts'?tsPerDay(hSt.ds?(hSt.ds.times[x.id]||[]).map(s=>({s})):hSt.rows[x.id],tz,f):k==='hist'?(hSt.ds?dsMap(hSt.ds.last[x.id]):lastPerDay(hSt.rows[x.id],tz)):k==='change'?aggregateStats(dayRows[x.id],k,tz):hour.ds?dsMap(hour.ds[k][x.id]):aggregateStats(hour.rows[x.id],k,tz),x.fac);
    const days=[];for(let d=fromDay;d<=toDay;d++){const o=out.get(d)||{day:d};for(const f of Object.keys(FIELDS))if(o[f]==null)o[f]=null;
     o.light=o.light; days.push(o)}return days},
   /* Aktivitäten, aus Historie der Garmin-Sensoren; Routen verknüpft über aktivitaet_id */
@@ -167,7 +172,7 @@ async function combine(recorder,archive){
   async dayCurve(d,k){return recorder.dayCurve(d,k)},
   async trackDetail(act){if(archive.enabled){try{return await archive.trackDetail(act)}catch(_){}}return null}}}
 
-const api={get daystats(){return DAYSTATS},resetDaystats(){DAYSTATS=null},tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
+const api={get daystats(){return DAYSTATS},get daystates(){return DAYSTATES},resetDaystats(){DAYSTATS=null;DAYSTATES=null},tsPerDay,PMAP,PSEC,setSourceConfig,sourceMode,pickState,pickTs,candidateIds,personalId,connectId,unitFactor,START_UTC,DAY,dayIndex,dayStartIso,decodePolyline,FIELDS,SPORT,aggregateStats,lastPerDay,mapActivity,mergeActivities,routesFromStates,recorderSource,archiveSource,combine};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FitnessData=api;
 })(typeof self!=='undefined'?self:this);
 
