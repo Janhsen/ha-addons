@@ -208,7 +208,7 @@ h1{font-size:28px;line-height:1.1;margin:0;letter-spacing:-.02em;font-weight:700
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.18);font-weight:600}
 .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
 #presets{max-width:100%;flex-wrap:wrap;overflow:visible;border-radius:22px}#presets::-webkit-scrollbar{display:none}
-.ldot{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block;flex:none;margin-right:6px;animation:lp 1.6s ease-out infinite}@keyframes lp{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--bad) 55%,transparent)}70%,100%{box-shadow:0 0 0 8px transparent}}@media (prefers-reduced-motion:reduce){.ldot{animation:none}}
+.ldot{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block;flex:none;margin-right:6px;position:relative}.ldot::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--bad);opacity:0;animation:lp 1.6s ease-out infinite}@keyframes lp{0%{transform:scale(1);opacity:.55}70%,100%{transform:scale(2.78);opacity:0}}@media (prefers-reduced-motion:reduce){.ldot::after{animation:none}}
 .card{background:var(--surface);border-radius:var(--r);padding:16px;border:1px solid var(--sep)}
 .muted{color:var(--text2)}
 .sm{font-size:12px}
@@ -1627,7 +1627,11 @@ async function fetchRaw(hass,cfg,who,prev){
  const tz=(hass.config&&hass.config.time_zone)||'Europe/Berlin',todayAbs=FD.dayIndex(Date.now(),tz),srcs={},covs={},now=Date.now(),key=cacheKey(hass,who);
  const light=!!prev&&!prev.rolled&&prev.key===key&&!!prev.cov&&prev.todayAbs===todayAbs&&now-prev.fullAt<3*36e5&&JSON.stringify(prev.who)===JSON.stringify(who)&&who.every(w=>prev.cov[w]&&prev.raw[w]&&prev.raw[w].rows&&prev.raw[w].rows.length===todayAbs-prev.off+1);
  /* im kurzen Weg ist der Beginn der Daten bekannt: kein eigener Abruf dafür */
- await Promise.all(who.map(async w=>{const o={personal:puOf(w)};if(light)o.from=prev.cov[w].recorderFrom;srcs[w]=await FD.combine(FD.recorderSource(hass,UNAME[w],o),FD.archiveSource({enabled:!!cfg.archive}));covs[w]=await srcs[w].coverage()}));
+ /* Laden ohne Zwischenspeicher: den zuletzt bekannten Beginn (localStorage) sofort nehmen und nebenher prüfen; weicht er ab, gilt der geprüfte und es wird damit geladen */
+ let known=null;if(!light)try{const j=JSON.parse(localStorage.getItem('fitness-card-from')||'null');if(j&&j.key===key&&who.every(w=>j.from&&j.from[w]!==undefined&&j.from[w]!==null))known=j.from}catch(e){}
+ const mkSrc=async(w,from)=>{const o={personal:puOf(w)};if(from!==undefined)o.from=from;return FD.combine(FD.recorderSource(hass,UNAME[w],o),FD.archiveSource({enabled:!!cfg.archive}))};
+ const truth=known?Promise.all(who.map(async w=>(await (await mkSrc(w)).coverage()).recorderFrom)):null;if(truth)truth.catch(()=>{});
+ await Promise.all(who.map(async w=>{srcs[w]=await mkSrc(w,light?prev.cov[w].recorderFrom:known?known[w]:undefined);covs[w]=await srcs[w].coverage()}));
  const froms=who.map(w=>covs[w].archiveEnabled?0:covs[w].recorderFrom).filter(x=>x!=null);
  if(!froms.length)throw new Error('Noch keine Garmin-Daten im Recorder');
  const off=light?prev.off:Math.min(...froms);
@@ -1638,6 +1642,9 @@ async function fetchRaw(hass,cfg,who,prev){
    const old=new Map(prev.raw[w].acts.map(a=>[a.id,a])),fresh=na.filter(a=>!(old.has(a.id)&&+a.date<since)),ids=new Set(fresh.map(a=>a.id));
    raw[w]={rows:prev.raw[w].rows.slice(0,from-off).concat(nr),acts:prev.raw[w].acts.filter(a=>!ids.has(a.id)).concat(fresh).sort((x,y)=>y.date-x.date)}}
   else{const[rows,acts]=await Promise.all([srcs[w].daily(off,todayAbs),srcs[w].activities(off,todayAbs)]);raw[w]={rows,acts}}}));
+ if(truth){let real=null;try{real=await truth}catch(e){}
+  if(real&&who.some((w,i)=>real[i]!==known[w])){try{localStorage.removeItem('fitness-card-from')}catch(e){}return fetchRaw(hass,cfg,who,null)}}
+ if(!light)try{localStorage.setItem('fitness-card-from',JSON.stringify({key,from:Object.fromEntries(who.map(w=>[w,covs[w].recorderFrom]))}))}catch(e){}
  return{v:CACHE_V,key,who:[...who],off,cov:covs,todayAbs,raw,fullAt:light?prev.fullAt:now,savedAt:now}}
 /* Rohdaten in den Zustand der Karte schreiben */
 async function applyRaw(hass,cfg,who,data,opt){
@@ -1677,14 +1684,21 @@ function drawTiles(c){const dark=host.getAttribute('data-theme')==='dark',Z=Math
 const LSPORT={running:'run',trail_running:'run',walking:'hike',hiking:'hike',cycling:'mtb',mountain_biking:'mtb',biking:'mtb',road_biking:'mtb',skiing:'ski',snowboarding:'ski',swimming:'swim'};
 const isLiveSensor=(id,s)=>/^binary_sensor\.garmin_inreach_relay_livetrack_/.test(id)&&s&&s.state==='on';
 function liveSig(hass){return Object.entries(hass.states||{}).filter(([id,s])=>isLiveSensor(id,s)).map(([id,s])=>id+'@'+(s.attributes.last_update||'')).sort().join('|')}
+const LTC=new Map(); /* Live-Track-Punkte je Tracker und Tourstart */
 async function loadLiveTracks(hass,who){
  HASSREF=hass;const out=[];
  for(const[id,s]of Object.entries(hass.states||{})){if(!isLiveSensor(id,s))continue;
   const at=s.attributes||{},w=whoOfName(at.person);if(!who.includes(w))continue;
   const tr=Object.values(hass.states).find(x=>x.entity_id.startsWith('device_tracker.garmin_inreach_relay_position_')&&at.person&&String((x.attributes||{}).friendly_name||'').includes(at.person));
   let pts=[],T=null,nopts=true;
-  if(tr&&at.start){try{const h=await hass.callWS({type:'history/history_during_period',start_time:at.start,end_time:new Date().toISOString(),entity_ids:[tr.entity_id],include_start_time_state:false,significant_changes_only:false,minimal_response:false,no_attributes:false});
-   const all=(h[tr.entity_id]||[]).map(x=>x.a||x.attributes).filter(a=>a),rows=all.filter(a=>a.latitude!=null);
+  if(tr&&at.start){try{
+   /* nur die Punkte seit dem letzten Abruf holen und an die bisherigen anhängen (der Track wächst mit der Tour) */
+   const ck=tr.entity_id+'|'+at.start;let C=LTC.get(ck);if(!C){if(LTC.size>8)LTC.clear();LTC.set(ck,C={rows:[],until:at.start})}
+   const h=await hass.callWS({type:'history/history_during_period',start_time:C.until,end_time:new Date().toISOString(),entity_ids:[tr.entity_id],include_start_time_state:false,significant_changes_only:false,minimal_response:false,no_attributes:false});
+   const u0=Date.parse(C.until),had=C.rows.length>0;let u1=u0;
+   for(const x of h[tr.entity_id]||[]){const t=x.lu!=null?x.lu*1000:Date.parse(x.last_updated||'');if(had&&isFinite(t)&&t<=u0)continue;if(isFinite(t)&&t>u1)u1=t;C.rows.push(x)}
+   if(u1>u0)C.until=new Date(u1).toISOString();
+   const all=C.rows.map(x=>x.a||x.attributes).filter(a=>a),rows=all.filter(a=>a.latitude!=null);
    pts=rows.map(a=>[a.latitude,a.longitude]);
    const lt=rows.filter(a=>a.source==='livetrack'),mine=lt.filter(a=>!at.session_id||a.livetrack_session===at.session_id);
    const la=all.filter(a=>a.source==='livetrack'),lm=la.filter(a=>!at.session_id||a.livetrack_session===at.session_id);
@@ -1748,9 +1762,17 @@ async function refreshLive(hass,who){
  ACTS=ACTS.filter(a=>!a.live).concat(lv).sort((a,b)=>b.date-a.date);byId=Object.fromEntries(ACTS.map(a=>[a.id,a]));
  if(S&&S.sel&&!byId[S.sel])S.sel=null}
 /* Tagesverlauf aus dem HA-Recorder: Schritte je Stunde und Body Battery. Stress und Herzfrequenz liefert Garmin nicht als Tagesverlauf, dafür gibt es keine Kurve. */
-async function dayReal(w,di){const hass=HASSREF,out={};if(!hass||!hass.states)return out;
+/* Tagesverlauf merken: vergangene Tage ändern sich nicht mehr (bis zum nächsten vollen Laden), heute gilt 60 s */
+const DAYMEMO=new Map();
+function dayReal(w,di){const k=w+'|'+(OFF+di)+'|'+JSON.stringify([srcNow(),srcByStored()]),m=DAYMEMO.get(k),now=Date.now();
+ if(m&&(di<ND?now-m.at<3*36e5:now-m.at<6e4))return m.p;
+ const p=dayRealLoad(w,di);if(DAYMEMO.size>60)DAYMEMO.clear();DAYMEMO.set(k,{at:now,p});p.then(r=>{if(!r||!Object.keys(r).length)DAYMEMO.delete(k)},()=>DAYMEMO.delete(k));return p}
+async function dayRealLoad(w,di){const hass=HASSREF,out={};if(!hass||!hass.states)return out;
  const u=UNAME[w],pu=puOf(w),t0=dAt(di).getTime(),t1=Math.min(Date.now(),t0+864e5),H=36e5,mode=FD.sourceMode;
- const hist=(id,attrs)=>hass.callWS({type:'history/history_during_period',start_time:new Date(t0).toISOString(),end_time:new Date(t1).toISOString(),entity_ids:[id],include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:!attrs}).then(h=>h[id]||[]);
+ /* alle Abrufe des Blatts gehen gleichzeitig los (vorher nacheinander); ausgewertet wird in derselben Reihenfolge wie bisher */
+ const HQ=new Map(),hist=(id,attrs)=>{const k=id+'|'+!!attrs;if(!HQ.has(k))HQ.set(k,hass.callWS({type:'history/history_during_period',start_time:new Date(t0).toISOString(),end_time:new Date(t1).toISOString(),entity_ids:[id],include_start_time_state:true,significant_changes_only:false,minimal_response:false,no_attributes:!attrs}).then(h=>h[id]||[]));return HQ.get(k)};
+ for(const [k,name] of [['steps','schritte'],['bb','body_battery']])for(const id of FD.candidateIds(hass.states,pu,u,name,mode(k)))hist(id,false).catch(()=>{});
+ for(const [,name,mk] of [['bbd','body_battery_verlauf','bb'],['hrd','puls_verlauf','hr'],['hrvd','hrv_verlauf','hrv']]){const id='sensor.'+pu+'_'+name;if(mode(mk)!=='connect'&&hass.states[id])hist(id,true).catch(()=>{})}
  const tsOf=x=>x.lu!=null?x.lu*1000:x.lc!=null?x.lc*1000:Date.parse(x.last_updated||x.last_changed);
  /* Stundenwerte: Schritte (Zuwachs je Stunde) und Body Battery (Mittel je Stunde). Kandidaten nach Quellenwahl, der erste mit brauchbaren Daten gewinnt */
  for(const [k,name] of [['steps','schritte'],['bb','body_battery']]){
